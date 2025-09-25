@@ -3,7 +3,7 @@ Configure Git (first-time setup):
 git config --global user.name "Your Name"
 git config --global user.email "you@example.com"
 
-
+com
 Sets your identity for commits.
 
 Clone the repository:
