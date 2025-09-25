@@ -1,125 +1,121 @@
-import random
 import turtle
+import random
 
 
-# --- CARD DRAWING FUNCTION (No changes here) ---
-def draw_uno_card(x, y, card):
+def create_uno_deck():
+    """Creates and returns a simple list of UNO card dictionaries."""
+    deck = []
+    colors = ['Red', 'Yellow', 'Green', 'Blue']
+    types = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'Skip', 'Reverse', 'Draw Two']
+
+    # Standard colored cards
+    for color in colors:
+        deck.append({'color': color, 'type': '0'})  # One '0' of each color
+        for card_type in types[1:]:  # Two of each 1-9, Skip, Reverse, Draw Two
+            for _ in range(2):
+                deck.append({'color': color, 'type': card_type})
+
+    # Wild cards
+    for _ in range(4):
+        deck.append({'color': 'Wild', 'type': 'Wild'})
+        deck.append({'color': 'Wild', 'type': 'Wild Draw Four'})  # Assuming these are part of the basic 4 wilds
+
+    return deck
+
+
+# --- Refined draw_uno_card function ---
+def draw_uno_card(pen, x, y, card):
     """
-    Draws a visual representation of an UNO card on the screen.
+    Draws a single UNO card at a specific location using a given turtle pen.
+    - pen: The turtle object to use for drawing.
     - x, y: The bottom-left corner coordinates to start drawing from.
     - card: A dictionary like {'color': 'Blue', 'type': '7'}.
     """
-    pen = turtle.Turtle()
-    pen.hideturtle()
-    pen.speed(0)
+    card_width = 80
+    card_height = 120
+
+    # --- Map game colors to screen colors ---
+    color_map = {
+        'Red': '#FF5555',
+        'Yellow': '#FFAA00',
+        'Green': '#55AA55',
+        'Blue': '#5555FF',
+        'Wild': 'black'  # Wild cards are black
+    }
+    card_color = color_map.get(card['color'], 'grey')  # Default to grey if color not found
+
     pen.penup()
-
-    color_map = {'Red': '#FF5555', 'Yellow': '#FFAA00', 'Green': '#55AA55', 'Blue': '#5555FF', 'Wild': 'black'}
-    card_color = color_map.get(card['color'], 'black')
-
-    pen.goto(x, y)
+    pen.goto(x, y)  # Move to the bottom-left corner of where the card should be
     pen.pendown()
-    pen.color('black', card_color)
+
+    pen.color('black', card_color)  # Outline is black, fill is card's color
     pen.begin_fill()
     for _ in range(2):
-        pen.forward(100)
+        pen.forward(card_width)
         pen.left(90)
-        pen.forward(150)
+        pen.forward(card_height)
         pen.left(90)
     pen.end_fill()
     pen.penup()
 
-    text_color = "white" if card['color'] != 'Yellow' else 'black'
+    # --- Write the card number or symbol in the center ---
+    text_color = "white" if card['color'] != 'Yellow' else 'black'  # Black text on yellow cards
     pen.color(text_color)
-    pen.goto(x + 50, y + 65)
-    pen.write(card['type'], align="center", font=("Arial", 30, "bold"))
+
+    # Position text in the center of the card
+    text_x = x + (card_width / 2)
+    text_y = y + (card_height / 2) - 15  # Adjust Y for text vertical alignment
+
+    pen.goto(text_x, text_y)
+    pen.write(card['type'], align="center", font=("Arial", 20, "bold"))
 
 
-# --- NEW: FUNCTION TO DRAW THE DECK PILE ---
-def draw_deck_pile(x, y):
-    """Draws the back of an UNO card to represent the deck."""
-    pen = turtle.Turtle()
-    pen.hideturtle()
-    pen.speed(0)
-    pen.penup()
-    pen.goto(x, y)
-    pen.pendown()
-    pen.color('black', '#222222')  # Dark grey fill for card back
-    pen.begin_fill()
-    for _ in range(2):
-        pen.forward(100)
-        pen.left(90)
-        pen.forward(150)
-        pen.left(90)
-    pen.end_fill()
-    pen.penup()
-
-    # Draw the UNO logo
-    pen.color('white')
-    pen.goto(x + 50, y + 55)
-    pen.write("UNO", align="center", font=("Arial", 28, "bold"))
-
-
-# --- GAME MANAGER CLASS (No changes here) ---
-class GameManager:
-    """Manages the state and logic of an UNO game."""
-
-    @staticmethod
-    def create_uno_deck():
-        """Creates and returns a standard deck of 108 UNO cards."""
-        colors = ['Red', 'Yellow', 'Green', 'Blue']
-        card_types = {
-            '0': 1, '1': 2, '2': 2, '3': 2, '4': 2, '5': 2, '6': 2, '7': 2, '8': 2, '9': 2,
-            'Skip': 2, 'Reverse': 2, 'Draw Two': 2
-        }
-        wild_cards = {'Wild': 4, 'Wild Draw Four': 4}
-        deck = []
-        for color in colors:
-            for card_type, count in card_types.items():
-                for _ in range(count):
-                    deck.append({'color': color, 'type': card_type})
-        for card_type, count in wild_cards.items():
-            for _ in range(count):
-                deck.append({'color': 'Wild', 'type': card_type})
-        return deck
-
-
-# --- MAIN GAME SETUP ---
-
-# 1. Setup the screen
+# --- Main Script ---
 screen = turtle.Screen()
-screen.setup(width=1000, height=600)
+screen.setup(width=900, height=600)
 screen.bgcolor("darkgreen")
-screen.title("UNO Game Setup")
+screen.title("UNO Cards - Improved")
+screen.tracer(0)  # Turn off automatic screen updates for faster drawing
 
-# 2. Create and shuffle the deck using the GameManager
-uno_deck = GameManager.create_uno_deck()
-random.shuffle(uno_deck)
-print(f"Deck created and shuffled with {len(uno_deck)} cards.")
+# Create a single turtle pen for all drawing operations
+main_pen = turtle.Turtle()
+main_pen.hideturtle()
+main_pen.speed(0)  # Max speed
 
-# 3. Draw the deck pile on the left
-draw_deck_pile(-350, 0)
+# Create a deck of cards and shuffle it
+full_deck = create_uno_deck()
+random.shuffle(full_deck)
 
-# 4. Draw the first card for the discard pile
-# Note: In a real game, you'd re-shuffle if this was a Wild Draw Four
-discard_card = uno_deck.pop()
-draw_uno_card(-200, 0, discard_card)
+# Draw 10 random cards from the deck in two neat rows
+# Increased spacing between cards
+card_spacing_x = 95
+card_spacing_y = 140  # Height + some space
 
-# 5. Deal and draw a starting hand of 7 cards
-player_hand = []
-for i in range(7):
-    # Position each card so they overlap slightly
-    card_x_position = -150 + (i * 40)
-    card_y_position = -250
+start_x_top_row = -350
+start_y_top_row = 100
 
-    # Draw a card from the top of the deck
-    new_card = uno_deck.pop()
-    player_hand.append(new_card)
+start_x_bottom_row = -350
+start_y_bottom_row = -50
 
-    # Draw the card on the screen
-    draw_uno_card(card_x_position, card_y_position, new_card)
+print(f"Drawing {min(len(full_deck), 10)} cards...")
 
-print(f"Dealt 7 cards to the player. {len(uno_deck)} cards remain in the deck.")
+for i in range(10):  # Let's draw 10 cards to fill the display
+    if not full_deck:
+        print("No more cards in the deck to draw.")
+        break
 
-# 6. Keep the window open
+    card_to_draw = full_deck.pop()
+
+    if i < 5:
+        # First row
+        card_x = start_x_top_row + (i * card_spacing_x)
+        card_y = start_y_top_row
+    else:
+        # Second row
+        card_x = start_x_bottom_row + ((i - 5) * card_spacing_x)
+        card_y = start_y_bottom_row
+
+    draw_uno_card(main_pen, card_x, card_y, card_to_draw)
+
+screen.update()  # Manually update the screen to show all drawings
 screen.exitonclick()
