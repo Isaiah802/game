@@ -1,0 +1,150 @@
+==========================
+Git Commands Cheat Sheet
+Repository: https://github.com/Isaiah802/game.git
+==========================
+
+1️⃣ Configure Git (first-time setup)
+------------------------------------
+Set your identity for commits:
+
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+
+
+2️⃣ Clone the repository
+------------------------
+Downloads the project to your local machine:
+
+git clone https://github.com/Isaiah802/game.git
+cd game
+
+
+3️⃣ Daily Workflow
+------------------
+Check the current branch:
+
+git branch
+# Displays the active branch
+
+
+Create and switch to a new branch:
+
+git checkout -b feature-branch-name
+# Starts a new branch for your work
+
+
+Stage changes for commit:
+
+git add .
+# Stages all modified files
+
+
+Commit staged changes:
+
+git commit -m "Describe your changes"
+# Commits the changes with a message
+
+
+Push changes to GitHub:
+
+git push origin feature-branch-name
+# Uploads your branch to the remote repository
+
+
+Pull the latest changes from the main branch:
+
+git checkout main
+git pull origin main
+# Ensures your local main branch is up-to-date
+
+
+4️⃣ Branch Management
+--------------------
+List all branches:
+
+git branch
+# Shows all local branches
+
+
+Switch to an existing branch:
+
+git checkout branch-name
+# Changes to the specified branch
+
+
+Merge a branch into the current branch:
+
+git merge branch-name
+# Integrates changes from another branch
+
+
+Delete a local branch:
+
+git branch -d branch-name
+# Removes a branch that's no longer needed
+
+
+5️⃣ Repository Status & History
+-------------------------------
+Check the status of your working directory:
+
+git status
+# Shows untracked, modified, or staged files
+
+
+View commit history:
+
+git log
+# Displays the commit history
+
+
+Show changes between commits:
+
+git diff commit1 commit2
+# Compares differences between two commits
+
+
+6️⃣ Undoing Changes
+------------------
+Unstage a staged file:
+
+git reset HEAD file-name
+# Removes a file from the staging area
+
+
+Discard changes in a file:
+
+git checkout -- file-name
+# Reverts changes in a file to the last committed state
+
+
+Remove a file from the working directory:
+
+git rm file-name
+# Deletes a file from both the working directory and staging area
+
+
+7️⃣ Remote Repository Interaction
+--------------------------------
+Add a remote repository:
+
+git remote add origin https://github.com/Isaiah802/game.git
+# Links your local repository to a remote one
+
+
+Fetch updates from the remote repository:
+
+git fetch origin
+# Downloads changes from the remote without merging
+
+
+Push changes to the remote repository:
+
+git push origin branch-name
+# Uploads your local branch to the remote
+
+
+Pull updates from the remote repository:
+
+git pull origin branch-name
+# Fetches and merges changes from the remote
