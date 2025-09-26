@@ -8,12 +8,41 @@ from cards.card import create_uno_deck, draw_uno_card_pygame
 # Alias the pygame draw helper to the short name used in the main loop
 draw_uno_card = draw_uno_card_pygame
 import random
+import json
+
+from ui.change_song_menu import ChangeSongMenu
+from ui.audio_settings import AudioSettingsMenu
 
 # ---------------- Paths ----------------
 BASE_DIR = os.path.dirname(__file__)
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 CARDS_DIR = os.path.join(ASSETS_DIR, 'cards')
-AUDIO_DIR = os.path.join(ASSETS_DIR, 'audio')
+AUDIO_SONGS_DIR = os.path.join(ASSETS_DIR, 'songs')
+AUDIO_SFX_DIR = os.path.join(ASSETS_DIR, 'sfx')
+AUDIO_ASSETS_BASE = ASSETS_DIR
+
+# Simple settings persistence
+SETTINGS_PATH = os.path.join(BASE_DIR, 'settings.json')
+
+
+def load_settings():
+    defaults = {'music_file': 'test.mp3', 'music_volume': 0.6, 'sfx_volume': 1.0}
+    try:
+        if os.path.exists(SETTINGS_PATH):
+            with open(SETTINGS_PATH, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                defaults.update(data)
+    except Exception:
+        pass
+    return defaults
+
+
+def save_settings(data: dict):
+    try:
+        with open(SETTINGS_PATH, 'w', encoding='utf-8') as f:
+            json.dump(data, f, indent=2)
+    except Exception:
+        pass
 
 # ---------------- Initialize Pygame ----------------
 pygame.init()
@@ -37,6 +66,9 @@ WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
 screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
 pygame.display.set_caption("Uno Game Prototype")
 
+# Import the menu
+from ui.start_menu import StartMenu
+
 # ---------------- Simple Game Loop ----------------
 def main_loop():
     print("\n=== Welcome to Uno Game Prototype ===")
@@ -45,10 +77,19 @@ def main_loop():
     turn = 0
     clock = pygame.time.Clock()
     # Initialize audio manager here so it doesn't run on import
-    audio = AudioManager(audio_folder=os.path.join(ASSETS_DIR, 'sounds'))
+    # Load settings and initialize audio with persisted preferences
+    settings = load_settings()
+    # Initialize AudioManager with assets base; it will resolve songs/ and sfx/
+    audio = AudioManager(audio_folder=AUDIO_ASSETS_BASE)
+    try:
+        audio.set_sfx_volume(settings.get('sfx_volume', 1.0))
+    except Exception:
+        pass
+    music_file = settings.get('music_file', 'test.mp3')
+    music_vol = settings.get('music_volume', 0.6)
     # Start background music (looping). If it fails, the AudioManager will
     # print an error and the game continues without sound.
-    audio.play_music('test.mp3', loop=True, volume=0.6)
+    audio.play_music(music_file, loop=True, volume=music_vol)
 
     try:
         running = True
@@ -99,4 +140,41 @@ def main_loop():
         sys.exit()
 
 if __name__ == "__main__":
-    main_loop()
+    # Keep returning to the Start Menu until the user quits.
+    menu = StartMenu(screen, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
+    while True:
+        choice = menu.run()
+        if choice == 'play':
+            # start the game; when main_loop returns we'll show the menu again
+            main_loop()
+        elif choice == 'change_song':
+            # Launch an interactive change-song UI with live preview, persist selection
+            audio = AudioManager(audio_folder=AUDIO_ASSETS_BASE)
+            changer = ChangeSongMenu(screen, audio_folder=AUDIO_SONGS_DIR, audio_manager=audio)
+            sel = changer.run()
+            if sel:
+                s = load_settings()
+                s['music_file'] = sel
+                save_settings(s)
+                audio.change_music(sel, loop=True)
+                print(f"Changed song to {sel}")
+            # return to start menu (do not auto-start)
+            continue
+        elif choice == 'settings':
+            # Open audio settings menu
+            audio = AudioManager(audio_folder=AUDIO_ASSETS_BASE)
+            settings_menu = AudioSettingsMenu(screen, audio_manager=audio)
+            result = settings_menu.run()
+            if isinstance(result, dict):
+                s = load_settings()
+                s['music_volume'] = result.get('music_volume', s.get('music_volume', 0.6))
+                s['sfx_volume'] = result.get('sfx_volume', s.get('sfx_volume', 1.0))
+                save_settings(s)
+            # return to start menu
+            continue
+        elif choice == 'quit':
+            print("Goodbye")
+            break
+        else:
+            # Unknown result — go back to menu
+            continue
