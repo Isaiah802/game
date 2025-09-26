@@ -12,12 +12,7 @@ AUDIO_DIR = os.path.join(ASSETS_DIR, 'audio')
 
 # ---------------- Initialize Pygame ----------------
 pygame.init()
-pygame.mixer.init()
 
-# ---------------- Initialize Audio ----------------
-audio = AudioManager(AUDIO_DIR)
-# Only pass the filename, NOT the full path
-audio.play_music('uno_game\assets\sound\test.mp3', loop=True, volume=0.6)
 
 # ---------------- Load a Sample Card Image ----------------
 sample_card_path = os.path.join(CARDS_DIR, 'funny_card.png')  # Replace with your image
@@ -40,7 +35,12 @@ def main_loop():
     
     turn = 0
     clock = pygame.time.Clock()
-    
+    # Initialize audio manager here so it doesn't run on import
+    audio = AudioManager(audio_folder=os.path.join(ASSETS_DIR, 'sounds'))
+    # Start background music (looping). If it fails, the AudioManager will
+    # print an error and the game continues without sound.
+    audio.play_music('test.mp3', loop=True, volume=0.6)
+
     try:
         running = True
         while running:
@@ -68,7 +68,11 @@ def main_loop():
     except KeyboardInterrupt:
         print("\n[Game] Exiting...")
     finally:
-        audio.stop_music()
+        # Stop music if audio manager was created
+        try:
+            audio.stop_music()
+        except Exception:
+            pass
         pygame.quit()
         sys.exit()
 

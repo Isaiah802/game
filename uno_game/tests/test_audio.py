@@ -1,5 +1,5 @@
 # uno_game/tests/test_audio.py
-from uno_game.audio.audio import AudioManager
+from audio import AudioManager
 import time
 
 def main():
