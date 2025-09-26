@@ -3,6 +3,11 @@ import sys
 import time
 import pygame
 from audio.audio import AudioManager
+from cards.card import create_uno_deck, draw_uno_card_pygame
+
+# Alias the pygame draw helper to the short name used in the main loop
+draw_uno_card = draw_uno_card_pygame
+import random
 
 # ---------------- Paths ----------------
 BASE_DIR = os.path.dirname(__file__)
@@ -12,16 +17,20 @@ AUDIO_DIR = os.path.join(ASSETS_DIR, 'audio')
 
 # ---------------- Initialize Pygame ----------------
 pygame.init()
+pygame.font.init()
 
 
 # ---------------- Load a Sample Card Image ----------------
-sample_card_path = os.path.join(CARDS_DIR, 'funny_card.png')  # Replace with your image
-if os.path.exists(sample_card_path):
-    card_image = pygame.image.load(sample_card_path)
-    print("[Graphics] Loaded sample card image successfully!")
-else:
-    card_image = None
-    print(f"[Graphics] Warning: {sample_card_path} not found!")
+# We'll render UNO cards directly in pygame (ported from cards/card.py)
+
+
+
+
+
+# Prepare a shuffled deck and select 10 cards to display
+full_deck = create_uno_deck()
+random.shuffle(full_deck)
+display_cards = [full_deck.pop() for _ in range(min(10, len(full_deck)))]
 
 # ---------------- Create Window ----------------
 WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
@@ -52,9 +61,22 @@ def main_loop():
             screen.fill((0, 128, 0))  # Green background
             
             # Draw card if loaded
-            if card_image:
-                screen.blit(card_image, (WINDOW_WIDTH//2 - card_image.get_width()//2,
-                                         WINDOW_HEIGHT//2 - card_image.get_height()//2))
+            # Draw 10 cards in two rows (ported from turtle implementation)
+            card_spacing_x = 95
+            card_spacing_y = 140
+            start_x_top_row = (WINDOW_WIDTH - (5 * 80 + 4 * (card_spacing_x - 80))) // 2
+            start_y_top_row = 100
+            start_x_bottom_row = start_x_top_row
+            start_y_bottom_row = 260
+
+            for i, card in enumerate(display_cards):
+                if i < 5:
+                    cx = start_x_top_row + (i * card_spacing_x)
+                    cy = start_y_top_row
+                else:
+                    cx = start_x_bottom_row + ((i - 5) * card_spacing_x)
+                    cy = start_y_bottom_row
+                draw_uno_card(screen, cx, cy, card)
             
             pygame.display.flip()
             
