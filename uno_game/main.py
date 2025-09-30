@@ -370,6 +370,15 @@ def main():
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Game - Launcher")
 
+    # Show the intro/splash screen before the main menu
+    try:
+        from ui.intro_screen import IntroScreen
+        intro = IntroScreen(title='Zanzibar', subtitle='A Dice Game I paid $1,152.60 to have this team name', duration=5.0)
+        intro.run(screen)
+    except Exception:
+        # If intro fails for any reason, continue to the menu
+        pass
+
     menu = StartMenu(screen, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
 
     # load settings and initialize audio
