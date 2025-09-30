@@ -3,153 +3,106 @@ import random
 import typing
 
 
-def draw_uno_card_pygame(surface, x, y, card, card_width=80, card_height=120):
-    """Draw a single UNO-style card onto a pygame surface.
+def create_dice_rolls(num_dice: int) -> typing.List[typing.Dict]:
+    """Creates and returns a list of random dice rolls."""
+    rolls = []
+    for _ in range(num_dice):
+        value = random.randint(1, 6)
+        rolls.append({'value': value})
+    return rolls
 
-    This helper mirrors the turtle `draw_uno_card` visuals but uses pygame.
-    It's kept here so callers can import drawing functionality from this module
-    rather than duplicating code in `main.py`.
+
+def draw_die(pen: turtle.Turtle, x: int, y: int, die: typing.Dict):
     """
-    try:
-        import pygame
-    except Exception:
-        raise RuntimeError("pygame is required for draw_uno_card_pygame")
-
-    color_map = {
-        'Red': (255, 85, 85),
-        'Yellow': (255, 170, 0),
-        'Green': (85, 170, 85),
-        'Blue': (85, 85, 255),
-        'Wild': (0, 0, 0),
-    }
-    card_color = color_map.get(card.get('color'), (128, 128, 128))
-
-    rect = pygame.Rect(x, y, card_width, card_height)
-    pygame.draw.rect(surface, card_color, rect)
-    pygame.draw.rect(surface, (0, 0, 0), rect, 2)
-
-    text_color = (0, 0, 0) if card.get('color') == 'Yellow' else (255, 255, 255)
-    font = pygame.font.SysFont('Arial', 24, bold=True)
-    text_surface = font.render(str(card.get('type')), True, text_color)
-    text_rect = text_surface.get_rect(center=(x + card_width / 2, y + card_height / 2))
-    surface.blit(text_surface, text_rect)
-
-
-
-def create_uno_deck():
-    """Creates and returns a simple list of UNO card dictionaries."""
-    deck = []
-    colors = ['Red', 'Yellow', 'Green', 'Blue']
-    types = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9', 'Skip', 'Reverse', 'Draw Two']
-
-    # Standard colored cards
-    for color in colors:
-        deck.append({'color': color, 'type': '0'})  # One '0' of each color
-        for card_type in types[1:]:  # Two of each 1-9, Skip, Reverse, Draw Two
-            for _ in range(2):
-                deck.append({'color': color, 'type': card_type})
-
-    # Wild cards
-    for _ in range(4):
-        deck.append({'color': 'Wild', 'type': 'Wild'})
-        deck.append({'color': 'Wild', 'type': 'Wild Draw Four'})  # Assuming these are part of the basic 4 wilds
-
-    return deck
-
-
-# --- Refined draw_uno_card function ---
-def draw_uno_card(pen, x, y, card):
-    """
-    Draws a single UNO card at a specific location using a given turtle pen.
+    Draws a single game die at a specific location using a given turtle pen.
     - pen: The turtle object to use for drawing.
-    - x, y: The bottom-left corner coordinates to start drawing from.
-    - card: A dictionary like {'color': 'Blue', 'type': '7'}.
+    - x, y: The bottom-left corner coordinates of the die.
+    - die: A dictionary like {'value': 5}.
     """
-    card_width = 80
-    card_height = 120
+    die_size = 80
+    pip_radius = 8
 
-    # --- Map game colors to screen colors ---
-    color_map = {
-        'Red': '#FF5555',
-        'Yellow': '#FFAA00',
-        'Green': '#55AA55',
-        'Blue': '#5555FF',
-        'Wild': 'black'  # Wild cards are black
-    }
-    card_color = color_map.get(card['color'], 'grey')  # Default to grey if color not found
-
+    # --- Draw the main square of the die ---
     pen.penup()
-    pen.goto(x, y)  # Move to the bottom-left corner of where the card should be
+    pen.goto(x, y)
     pen.pendown()
-
-    pen.color('black', card_color)  # Outline is black, fill is card's color
+    pen.color('black', 'white')  # Black outline, white fill
     pen.begin_fill()
-    for _ in range(2):
-        pen.forward(card_width)
-        pen.left(90)
-        pen.forward(card_height)
+    for _ in range(4):
+        pen.forward(die_size)
         pen.left(90)
     pen.end_fill()
     pen.penup()
 
-    # --- Write the card number or symbol in the center ---
-    text_color = "white" if card['color'] != 'Yellow' else 'black'  # Black text on yellow cards
-    pen.color(text_color)
+    # --- Helper function to draw a single pip (dot) ---
+    def draw_pip(pip_x, pip_y):
+        pen.goto(pip_x, pip_y - pip_radius)  # Go to bottom of circle
+        pen.pendown()
+        pen.color('black', 'black')
+        pen.begin_fill()
+        pen.circle(pip_radius)
+        pen.end_fill()
+        pen.penup()
 
-    # Position text in the center of the card
-    text_x = x + (card_width / 2)
-    text_y = y + (card_height / 2) - 15  # Adjust Y for text vertical alignment
+    # --- Calculate pip positions based on the die's value ---
+    val = die.get('value')
 
-    pen.goto(text_x, text_y)
-    pen.write(card['type'], align="center", font=("Arial", 20, "bold"))
+    # Pre-calculate common coordinates based on die size
+    col_1 = x + die_size * 0.25
+    col_2 = x + die_size * 0.50
+    col_3 = x + die_size * 0.75
+    row_1 = y + die_size * 0.75
+    row_2 = y + die_size * 0.50
+    row_3 = y + die_size * 0.25
+
+    # Use a more efficient structure to draw pips shared by multiple values
+    if val in [1, 3, 5]:
+        draw_pip(col_2, row_2)  # Center pip
+    if val in [2, 3, 4, 5, 6]:
+        draw_pip(col_1, row_1)  # Top-left
+        draw_pip(col_3, row_3)  # Bottom-right
+    if val in [4, 5, 6]:
+        draw_pip(col_3, row_1)  # Top-right
+        draw_pip(col_1, row_3)  # Bottom-left
+    if val == 6:
+        draw_pip(col_1, row_2)  # Middle-left
+        draw_pip(col_3, row_2)  # Middle-right
 
 
 if __name__ == "__main__":
     # --- Main Script (turtle demo) ---
     screen = turtle.Screen()
     screen.setup(width=900, height=600)
-    screen.bgcolor("darkgreen")
-    screen.title("UNO Cards - Improved")
+    screen.bgcolor("#1E5631")  # A nice dark green for a game table
+    screen.title("Dice Game")
     screen.tracer(0)  # Turn off automatic screen updates for faster drawing
 
-    # Create a single turtle pen for all drawing operations
     main_pen = turtle.Turtle()
     main_pen.hideturtle()
-    main_pen.speed(0)  # Max speed
+    main_pen.speed(0)
 
-    # Create a deck of cards and shuffle it
-    full_deck = create_uno_deck()
-    random.shuffle(full_deck)
+    # Generate 10 random dice rolls
+    dice_to_draw = create_dice_rolls(10)
 
-    # Draw 10 random cards from the deck in two neat rows
-    card_spacing_x = 95
-    card_spacing_y = 140  # Height + some space
-
-    start_x_top_row = -350
+    # --- Define layout for drawing the dice ---
+    die_spacing = 100
+    start_x = - (4.5 * die_spacing) / 2  # Center the rows
     start_y_top_row = 100
-
-    start_x_bottom_row = -350
     start_y_bottom_row = -50
 
-    print(f"Drawing {min(len(full_deck), 10)} cards...")
+    print(f"Drawing {len(dice_to_draw)} dice...")
 
-    for i in range(10):  # Let's draw 10 cards to fill the display
-        if not full_deck:
-            print("No more cards in the deck to draw.")
-            break
-
-        card_to_draw = full_deck.pop()
-
+    for i, die_to_draw in enumerate(dice_to_draw):
         if i < 5:
             # First row
-            card_x = start_x_top_row + (i * card_spacing_x)
-            card_y = start_y_top_row
+            die_x = start_x + (i * die_spacing)
+            die_y = start_y_top_row
         else:
             # Second row
-            card_x = start_x_bottom_row + ((i - 5) * card_spacing_x)
-            card_y = start_y_bottom_row
+            die_x = start_x + ((i - 5) * die_spacing)
+            die_y = start_y_bottom_row
 
-        draw_uno_card(main_pen, card_x, card_y, card_to_draw)
+        draw_die(main_pen, die_x, die_y, die_to_draw)
 
-    screen.update()  # Manually update the screen to show all drawings
+    screen.update()
     screen.exitonclick()
