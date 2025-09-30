@@ -137,6 +137,167 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
         clock.tick(60)
 
 
+def player_setup(screen: pygame.Surface):
+    """Pre-game form with clickable buttons, caret blinking, and a scrollable players list.
+
+    Returns (player_names, starting_chips) or None if cancelled.
+    """
+    clock = pygame.time.Clock()
+    font = pygame.font.SysFont('Arial', 20)
+    input_text = ''
+    players = []
+    starting_chips = 20  # fixed per requirement
+
+    # Button rectangles
+    btn_w, btn_h = 100, 36
+    add_btn = pygame.Rect(20, 420, btn_w, btn_h)
+    remove_btn = pygame.Rect(140, 420, btn_w, btn_h)
+    start_btn = pygame.Rect(260, 420, btn_w, btn_h)
+    cancel_btn = pygame.Rect(380, 420, btn_w, btn_h)
+
+    error_msg = ''
+    scroll_offset = 0
+    caret_visible = True
+    last_blink = pygame.time.get_ticks()
+    blink_interval = 500
+
+    def draw_button(rect, text):
+        col = (200, 200, 200)
+        if rect.collidepoint(pygame.mouse.get_pos()):
+            col = (170, 170, 170)
+        pygame.draw.rect(screen, col, rect)
+        pygame.draw.rect(screen, (0, 0, 0), rect, 2)
+        txt = font.render(text, True, (0, 0, 0))
+        tr = txt.get_rect(center=rect.center)
+        screen.blit(txt, tr)
+
+    while True:
+        now = pygame.time.get_ticks()
+        if now - last_blink >= blink_interval:
+            caret_visible = not caret_visible
+            last_blink = now
+
+        mx, my = pygame.mouse.get_pos()
+        mouse_pressed = False
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mouse_pressed = True
+            elif event.type == pygame.MOUSEWHEEL:
+                # mouse wheel scroll
+                max_off = max(0, len(players) - 8)
+                scroll_offset = min(max_off, max(0, scroll_offset - event.y))
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_ESCAPE:
+                    return None
+                elif event.key == pygame.K_RETURN:
+                    if input_text.strip():
+                        players.append(input_text.strip())
+                        input_text = ''
+                        error_msg = ''
+                elif event.key == pygame.K_BACKSPACE:
+                    if input_text:
+                        input_text = input_text[:-1]
+                    elif players:
+                        players.pop()
+                elif event.key == pygame.K_UP:
+                    scroll_offset = max(0, scroll_offset - 1)
+                elif event.key == pygame.K_DOWN:
+                    max_off = max(0, len(players) - 8)
+                    scroll_offset = min(max_off, scroll_offset + 1)
+                else:
+                    ch = event.unicode
+                    if ch and ch.isprintable():
+                        input_text += ch
+
+        # Handle button clicks
+        if mouse_pressed:
+            if add_btn.collidepoint((mx, my)):
+                if input_text.strip():
+                    players.append(input_text.strip())
+                    input_text = ''
+                    error_msg = ''
+            elif remove_btn.collidepoint((mx, my)):
+                if players:
+                    players.pop()
+            elif start_btn.collidepoint((mx, my)):
+                if len(players) < 2:
+                    error_msg = 'Need at least 2 players'
+                else:
+                    return players, starting_chips
+            elif cancel_btn.collidepoint((mx, my)):
+                return None
+
+        # Draw UI
+        screen.fill((25, 100, 25))
+        y = 20
+        title = font.render('Pre-game Setup', True, (255, 255, 255))
+        screen.blit(title, (20, y))
+        y += 36
+
+        instr = font.render("Type a name then click Add (or press Enter).", True, (230, 230, 230))
+        screen.blit(instr, (20, y))
+        y += 30
+
+        chips_txt = font.render(f'Starting chips (fixed): {starting_chips}', True, (255, 255, 255))
+        screen.blit(chips_txt, (20, y))
+        y += 30
+
+        # Input box
+        input_box = pygame.Rect(20, y, 300, 36)
+        pygame.draw.rect(screen, (255, 255, 255), input_box, 2)
+        input_surf = font.render(input_text, True, (255, 255, 255))
+        screen.blit(input_surf, (input_box.x + 6, input_box.y + 6))
+        y += 50
+
+        # Players list (scrollable)
+        pl_title = font.render('Players:', True, (255, 255, 255))
+        screen.blit(pl_title, (20, y))
+        y += 26
+        visible_count = 8
+        max_off = max(0, len(players) - visible_count)
+        scroll_offset = max(0, min(scroll_offset, max_off))
+        start_idx = scroll_offset
+        end_idx = min(len(players), start_idx + visible_count)
+        for p in players[start_idx:end_idx]:
+            ptxt = font.render('- ' + p, True, (240, 240, 240))
+            screen.blit(ptxt, (40, y))
+            y += 24
+
+        # small scrollbar indicator if needed
+        if len(players) > visible_count:
+            bar_h = visible_count * 20
+            bar_x = 10
+            bar_y = 120
+            pygame.draw.rect(screen, (200, 200, 200), (bar_x, bar_y, 6, bar_h))
+            thumb_h = max(12, int(bar_h * (visible_count / len(players))))
+            thumb_y = bar_y + int((bar_h - thumb_h) * (scroll_offset / max_off)) if max_off else bar_y
+            pygame.draw.rect(screen, (120, 120, 120), (bar_x, thumb_y, 6, thumb_h))
+
+        # caret
+        if caret_visible:
+            caret_x = input_box.x + 6 + input_surf.get_width()
+            caret_y1 = input_box.y + 6
+            caret_y2 = input_box.y + input_box.height - 6
+            pygame.draw.line(screen, (255, 255, 255), (caret_x, caret_y1), (caret_x, caret_y2), 2)
+
+        # Draw buttons
+        draw_button(add_btn, 'Add')
+        draw_button(remove_btn, 'Remove')
+        draw_button(start_btn, 'Start')
+        draw_button(cancel_btn, 'Cancel')
+
+        # Error message
+        if error_msg:
+            em = font.render(error_msg, True, (255, 100, 100))
+            screen.blit(em, (20, 300))
+
+        pygame.display.flip()
+        clock.tick(60)
+
+
 def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     """Runs the Zanzibar GameManager in interactive mode inside the pygame window.
 
@@ -147,46 +308,50 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     clock = pygame.time.Clock()
     font = pygame.font.SysFont('Arial', 20)
 
-    # For simplicity prompt for two players by default
-    player_names = ["Alice", "Bob"]
-    gm = GameManager(player_names)
+    # For simplicity, player names and starting chips are provided before starting
+    # the engine via a small pre-game form.
+    setup = player_setup(screen)
+    if not setup:
+        return
+    player_names, starting_chips = setup
+    gm = GameManager(player_names, starting_chips)
 
-    playing = True
-    info_lines = ["Press Space to play a round, Esc to return"]
-
-    while playing:
+    running = True
+    while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_SPACE:
-                    # play a round using the engine (this prints to stdout)
+                if event.key == pygame.K_ESCAPE:
+                    running = False
+                elif event.key == pygame.K_SPACE:
+                    # play a round
                     gm.play_round()
-                    winner = gm.check_for_winner()
-                    if winner:
-                        info_lines.insert(0, f"Game Over: {winner} lost their chips")
-                        playing = False
-                elif event.key == pygame.K_ESCAPE:
-                    playing = False
 
-        screen.fill((30, 140, 40))
-        y = 20
-        title = font.render("Zanzibar - Press Space to play a round", True, (255, 255, 255))
-        screen.blit(title, (20, y))
-        y += 40
+        # Draw the game state
+        screen.fill((40, 40, 60))
+        header = font.render('Press Space to play next round, Esc to return to menu', True, (255, 255, 255))
+        screen.blit(header, (20, 20))
 
-        # show player chip counts
-        for player, data in gm.players.items():
-            line = font.render(f"{player}: {data['chips']} chips", True, (255, 255, 255))
-            screen.blit(line, (20, y))
-            y += 30
+        # Render players and chips
+        y = 80
+        die_size = 36
+        spacing_x = 10
+        for i, name in enumerate(gm.player_order):
+            chips = gm.players.get(name, {}).get('chips', 0)
+            txt = font.render(f'{name}: {chips} chips', True, (230, 230, 230))
+            screen.blit(txt, (20, y))
 
-        # show recent info lines
-        for ln in info_lines[:6]:
-            l = font.render(ln, True, (255, 255, 255))
-            screen.blit(l, (20, y))
-            y += 24
+            # Render final roll if available
+            result = gm.round_results.get(name)
+            if result:
+                final = result.get('final_roll', [])
+                for j, v in enumerate(final):
+                    x = 220 + j * (die_size + spacing_x)
+                    draw_die(screen, x, y - 6, die_size, v)
+
+            y += 50
 
         pygame.display.flip()
         clock.tick(30)
@@ -215,7 +380,7 @@ def main():
     while True:
         choice = menu.run()
         if choice == 'play':
-            # Launch the full Zanzibar-style dice game engine
+            # Launch the full Zanzibar-style dice game engine (with pre-game setup)
             run_game_engine(screen, audio)
             continue
         elif choice == 'change_song':
