@@ -165,11 +165,16 @@ class TestIntegration(unittest.TestCase):
         if 'pygame' in sys.modules:
             del sys.modules['pygame']
 
-    def test_create_uno_deck(self):
-        deck = card.create_uno_deck()
-        self.assertIsInstance(deck, list)
-        self.assertTrue(any(c['color'] == 'Red' for c in deck))
-        self.assertTrue(any(c['type'] == 'Wild' for c in deck))
+    def test_create_dice_rolls(self):
+        rolls = card.create_dice_rolls(12)
+        self.assertIsInstance(rolls, list)
+        self.assertEqual(len(rolls), 12)
+        for r in rolls:
+            self.assertIsInstance(r, dict)
+            self.assertIn('value', r)
+            self.assertIsInstance(r['value'], int)
+            self.assertGreaterEqual(r['value'], 1)
+            self.assertLessEqual(r['value'], 6)
 
     def test_audio_manager_basic(self):
         import tempfile
@@ -206,19 +211,8 @@ class TestIntegration(unittest.TestCase):
 
         am.stop_music()
 
-    def test_draw_uno_card_pygame_calls_surface_methods(self):
-        class FakeSurface:
-            def __init__(self):
-                self.ops = []
-
-            def blit(self, src, rect):
-                self.ops.append(('blit', src, rect))
-
-        surface = FakeSurface()
-        sample_card = {'color': 'Blue', 'type': '7'}
-        # Should not raise
-        card.draw_uno_card_pygame(surface, 10, 20, sample_card)
-        self.assertTrue(any(op[0] == 'blit' for op in surface.ops))
+    # Card-drawing tests were removed when the project converted to a dice-focused demo.
+    # The audio-related tests above still validate AudioManager.
 
 
 if __name__ == '__main__':

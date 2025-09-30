@@ -67,9 +67,10 @@ class StartMenu:
 
         self.buttons = [
             make_btn(0, "Play", 'play'),
-            make_btn(1, "Audio Settings", 'settings'),
-            make_btn(2, "Change Song", 'change_song'),
-            make_btn(3, "Quit", 'quit'),
+            make_btn(1, "Dice Demo", 'dice'),
+            make_btn(2, "Audio Settings", 'settings'),
+            make_btn(3, "Change Song", 'change_song'),
+            make_btn(4, "Quit", 'quit'),
         ]
         # keyboard selection index
         self.selected = 0
@@ -79,7 +80,7 @@ class StartMenu:
 
     def draw(self):
         self.screen.fill((20, 120, 20))
-        title = self.title_font.render("UNO - Start Menu", True, (255, 255, 255))
+        title = self.title_font.render("Game - Start Menu", True, (255, 255, 255))
         tr = title.get_rect(center=(self.width // 2, 120))
         self.screen.blit(title, tr)
 

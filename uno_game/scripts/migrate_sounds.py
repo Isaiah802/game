@@ -4,7 +4,7 @@ Usage:
     python migrate_sounds.py [--source PATH] [--assets PATH] [--dry-run] [--yes]
 
 Behavior:
- - Detects legacy folder (defaults to <repo>/uno_game/assets/sounds).
+ - Detects legacy folder (defaults to <repo>/assets/sounds).
  - Creates <assets>/songs and <assets>/sfx if missing.
  - Moves files using extension/keyword heuristics:
      * music extensions: .mp3, .flac, .m4a
@@ -111,8 +111,8 @@ def migrate(source: Path, assets_base: Path, dry_run: bool = True) -> Tuple[List
 
 def main(argv: List[str] | None = None):
     p = argparse.ArgumentParser(description='Migrate legacy sounds into songs/ and sfx/')
-    p.add_argument('--source', '-s', help='legacy source folder (defaults to uno_game/assets/sounds)')
-    p.add_argument('--assets', '-a', help='assets base folder (defaults to uno_game/assets)')
+    p.add_argument('--source', '-s', help='legacy source folder (defaults to assets/sounds)')
+    p.add_argument('--assets', '-a', help='assets base folder (defaults to assets)')
     p.add_argument('--dry-run', action='store_true', help='show planned moves but do not perform them')
     p.add_argument('--yes', action='store_true', help='do not prompt, assume yes')
     args = p.parse_args(argv)
