@@ -338,10 +338,16 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         y = 80
         die_size = 36
         spacing_x = 10
+        from cards.chips import draw_chip_stack
+
         for i, name in enumerate(gm.player_order):
             chips = gm.players.get(name, {}).get('chips', 0)
-            txt = font.render(f'{name}: {chips} chips', True, (230, 230, 230))
+            txt = font.render(f'{name}:', True, (230, 230, 230))
             screen.blit(txt, (20, y))
+            # draw chip stack to the right of the name
+            name_w = txt.get_width()
+            stack_x = 20 + name_w + 12
+            draw_chip_stack(screen, stack_x, y - 6, chips, chip_radius=8, max_display=10, font=font)
 
             # Render final roll if available
             result = gm.round_results.get(name)
