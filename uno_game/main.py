@@ -3,10 +3,10 @@ import sys
 import time
 import pygame
 from audio.audio import AudioManager
-from cards.card import create_uno_deck, draw_uno_card_pygame
+from cards.card import create_dice_rolls, draw_die
 
 # Alias the pygame draw helper to the short name used in the main loop
-draw_uno_card = draw_uno_card_pygame
+draw_die = draw_die
 import random
 import json
 
@@ -57,9 +57,10 @@ pygame.font.init()
 
 
 # Prepare a shuffled deck and select 10 cards to display
-full_deck = create_uno_deck()
-random.shuffle(full_deck)
-display_cards = [full_deck.pop() for _ in range(min(10, len(full_deck)))]
+full_dice = create_dice_rolls()
+random.shuffle(full_dice)
+display_cards = [full_dice.pop() for _ in range(min(10, len(full_dice))]
+
 
 # ---------------- Create Window ----------------
 WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
@@ -117,7 +118,7 @@ def main_loop():
                 else:
                     cx = start_x_bottom_row + ((i - 5) * card_spacing_x)
                     cy = start_y_bottom_row
-                draw_uno_card(screen, cx, cy, card)
+                draw_die(screen, cx, cy, card)
             
             pygame.display.flip()
             
