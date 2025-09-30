@@ -160,10 +160,6 @@ def main():
     while True:
         choice = menu.run()
         if choice == 'play':
-            # placeholder for a full game
-            print('Play selected (no full game implemented).')
-            continue
-        elif choice == 'dice':
             run_dice_demo(screen, audio, num_dice=10)
             continue
         elif choice == 'change_song':

@@ -67,10 +67,9 @@ class StartMenu:
 
         self.buttons = [
             make_btn(0, "Play", 'play'),
-            make_btn(1, "Dice Demo", 'dice'),
-            make_btn(2, "Audio Settings", 'settings'),
-            make_btn(3, "Change Song", 'change_song'),
-            make_btn(4, "Quit", 'quit'),
+            make_btn(1, "Audio Settings", 'settings'),
+            make_btn(2, "Change Song", 'change_song'),
+            make_btn(3, "Quit", 'quit'),
         ]
         # keyboard selection index
         self.selected = 0
