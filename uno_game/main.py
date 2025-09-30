@@ -22,6 +22,7 @@ from ui.start_menu import StartMenu
 from ui.change_song_menu import ChangeSongMenu
 from ui.audio_settings import AudioSettingsMenu
 from cards.card import create_dice_rolls
+from game.game_engine import GameManager
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -136,6 +137,60 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
         clock.tick(60)
 
 
+def run_game_engine(screen: pygame.Surface, audio: AudioManager):
+    """Runs the Zanzibar GameManager in interactive mode inside the pygame window.
+
+    Controls:
+    - Space: Play next round
+    - Esc: Return to menu
+    """
+    clock = pygame.time.Clock()
+    font = pygame.font.SysFont('Arial', 20)
+
+    # For simplicity prompt for two players by default
+    player_names = ["Alice", "Bob"]
+    gm = GameManager(player_names)
+
+    playing = True
+    info_lines = ["Press Space to play a round, Esc to return"]
+
+    while playing:
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                sys.exit()
+            elif event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_SPACE:
+                    # play a round using the engine (this prints to stdout)
+                    gm.play_round()
+                    winner = gm.check_for_winner()
+                    if winner:
+                        info_lines.insert(0, f"Game Over: {winner} lost their chips")
+                        playing = False
+                elif event.key == pygame.K_ESCAPE:
+                    playing = False
+
+        screen.fill((30, 140, 40))
+        y = 20
+        title = font.render("Zanzibar - Press Space to play a round", True, (255, 255, 255))
+        screen.blit(title, (20, y))
+        y += 40
+
+        # show player chip counts
+        for player, data in gm.players.items():
+            line = font.render(f"{player}: {data['chips']} chips", True, (255, 255, 255))
+            screen.blit(line, (20, y))
+            y += 30
+
+        # show recent info lines
+        for ln in info_lines[:6]:
+            l = font.render(ln, True, (255, 255, 255))
+            screen.blit(l, (20, y))
+            y += 24
+
+        pygame.display.flip()
+        clock.tick(30)
+
 def main():
     pygame.init()
     pygame.font.init()
@@ -160,7 +215,8 @@ def main():
     while True:
         choice = menu.run()
         if choice == 'play':
-            run_dice_demo(screen, audio, num_dice=10)
+            # Launch the full Zanzibar-style dice game engine
+            run_game_engine(screen, audio)
             continue
         elif choice == 'change_song':
             changer = ChangeSongMenu(screen, audio_folder=os.path.join(ASSETS_DIR, 'songs'), audio_manager=audio)
