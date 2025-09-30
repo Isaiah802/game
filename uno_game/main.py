@@ -377,24 +377,24 @@ def main():
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Game - Launcher")
 
-    # Show the intro/splash screen before the main menu
-    try:
-        from ui.intro_screen import IntroScreen
-        intro = IntroScreen(title='Zanzibar', subtitle='A Dice Game by I paid $1,152.60 to have this team name', duration=5.0)
-        intro.run(screen)
-    except Exception:
-        # If intro fails for any reason, continue to the menu
-        pass
-
-    menu = StartMenu(screen, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
-
-    # load settings and initialize audio
+    # load settings and initialize audio (do this before intro so intro can play a clip)
     settings = load_settings()
     audio = AudioManager(audio_folder=ASSETS_DIR)
     try:
         audio.set_sfx_volume(settings.get('sfx_volume', 1.0))
     except Exception:
         pass
+
+    # Show the intro/splash screen before the main menu
+    try:
+        from ui.intro_screen import IntroScreen
+        intro = IntroScreen(title='Zanzibar', subtitle='A Dice Game by I paid $1,152.60 to have this team name', duration=5.0)
+        intro.run(screen, audio_manager=audio)
+    except Exception:
+        # If intro fails for any reason, continue to the menu
+        pass
+
+    menu = StartMenu(screen, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
     music_file = settings.get('music_file', 'test.mp3')
     music_vol = settings.get('music_volume', 0.6)
     audio.play_music(music_file, loop=True, volume=music_vol)
