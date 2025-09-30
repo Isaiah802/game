@@ -1,60 +1,155 @@
-
 import random
+from collections import Counter
 
 
 class GameManager:
-    import random
+    """Manages the state and logic of a Zanzibar dice game."""
 
-    class GameManager:
-        """Manages the state and logic of a simple dice game."""
+    def __init__(self, player_names: list, starting_chips: int = 20):
+        """
+        Initializes the Zanzibar game.
 
-        def __init__(self):
-            """Initializes the game by setting up a place to store player rolls."""
-            self.player_rolls = {}
+        Args:
+            player_names: A list of names for the players.
+            starting_chips: The number of chips each player starts with.
+        """
+        if len(player_names) < 2:
+            raise ValueError("Zanzibar requires at least 2 players.")
 
-        def add_player(self, player_name: str):
-            """
-            Adds a player to the game.
+        self.players = {name: {'chips': starting_chips} for name in player_names}
+        self.player_order = player_names
+        self.round_results = {}
+        print(f"Zanzibar game started with players: {', '.join(player_names)}")
+        self.print_scores()
 
-            Args:
-                player_name: The name of the player to add.
-            """
-            if player_name not in self.player_rolls:
-                self.player_rolls[player_name] = []
-                print(f"Player '{player_name}' has joined the game.")
-            else:
-                print(f"Player '{player_name}' is already in the game.")
+    @staticmethod
+    def _calculate_score(roll: list) -> dict:
+        """
+        Calculates the score of a roll based on Zanzibar rules.
+        A higher 'rank' is always better. For rolls with the same rank (e.g., two
+        different three-of-a-kinds), the 'value' is used to break ties.
 
-        @staticmethod
-        def _roll_dice(num_dice: int) -> list[int]:
-            """
-            A private static method to generate a list of random dice rolls.
+        Args:
+            roll: A list of 3 integers representing a dice roll.
 
-            Args:
-                num_dice: The number of dice to roll.
+        Returns:
+            A dictionary containing the comparable score and the chip payout value.
+        """
+        roll.sort()
 
-            Returns:
-                A list of integers representing the outcome of each die roll.
-            """
-            # A standard die has 6 sides (1-6)
-            return [random.randint(1, 6) for _ in range(num_dice)]
+        # Zanzibar (4, 5, 6) - Highest rank
+        if roll == [4, 5, 6]:
+            return {'score': (4, 0), 'payout': 4, 'name': "Zanzibar!"}
 
-        def play_turn(self, player_name: str, num_dice: int = 2):
-            """
-            Simulates a player's turn by rolling a set number of dice and
-            updating their state in the game.
+        # Three-of-a-kind - Second highest rank
+        if roll[0] == roll[1] == roll[2]:
+            return {'score': (3, roll[0]), 'payout': 3, 'name': f"Three of a kind ({roll[0]}s)"}
 
-            Args:
-                player_name: The name of the player whose turn it is.
-                num_dice: The number of dice they will roll. Defaults to 2.
-            """
-            if player_name not in self.player_rolls:
-                print(f"Error: Cannot play turn for '{player_name}' because they are not in the game.")
-                return None
+        # 1, 2, 3 - Third highest rank
+        if roll == [1, 2, 3]:
+            return {'score': (2, 0), 'payout': 2, 'name': "1-2-3"}
 
-            roll_result = self._roll_dice(num_dice)
-            self.player_rolls[player_name] = roll_result
+        # Points total - Lowest rank
+        return {'score': (1, sum(roll)), 'payout': 1, 'name': f"Points total ({sum(roll)})"}
 
-            total = sum(roll_result)
-            print(f"{player_name} rolled {num_dice} dice: {roll_result} (Total: {total})")
-            return roll_result
+    def _simulate_player_turn(self, max_rolls: int) -> dict:
+        """Simulates a single player's turn, trying to get the best score."""
+        current_roll = [random.randint(1, 6) for _ in range(3)]
+
+        for roll_num in range(1, max_rolls):
+            score_info = self._calculate_score(current_roll)
+            # Simple AI: Stop if score is high, otherwise re-roll.
+            # A good hand (rank > 1) is worth keeping.
+            if score_info['score'][0] > 1:
+                return {'final_roll': current_roll, 'rolls_taken': roll_num}
+
+            # AI: Decide which dice to re-roll. Keep pairs or high dice.
+            counts = Counter(current_roll)
+            if 3 in counts.values():  # Three of a kind
+                return {'final_roll': current_roll, 'rolls_taken': roll_num}
+
+            kept_dice = []
+            # Keep pairs
+            for val, count in counts.items():
+                if count == 2:
+                    kept_dice.extend([val, val])
+                    break
+
+            # If no pair, keep the highest die
+            if not kept_dice:
+                kept_dice.append(max(current_roll))
+
+            num_to_reroll = 3 - len(kept_dice)
+            new_dice = [random.randint(1, 6) for _ in range(num_to_reroll)]
+            current_roll = kept_dice + new_dice
+
+        return {'final_roll': current_roll, 'rolls_taken': max_rolls}
+
+    def play_round(self):
+        """Plays one full round of Zanzibar."""
+        print("\n--- Starting New Round ---")
+        self.round_results = {}
+
+        # First player's turn sets the roll limit for others
+        first_player = self.player_order[0]
+        print(f"\n{first_player}'s turn (first player):")
+        turn_result = self._simulate_player_turn(max_rolls=3)
+        self.round_results[first_player] = turn_result
+        roll_limit = turn_result['rolls_taken']
+        print(f"{first_player} finished in {roll_limit} roll(s) with {turn_result['final_roll']}")
+
+        # Other players' turns
+        for i in range(1, len(self.player_order)):
+            player = self.player_order[i]
+            print(f"\n{player}'s turn (must finish in {roll_limit} roll(s) or fewer):")
+            turn_result = self._simulate_player_turn(max_rolls=roll_limit)
+            self.round_results[player] = turn_result
+            print(f"{player} finished in {turn_result['rolls_taken']} roll(s) with {turn_result['final_roll']}")
+
+        self._resolve_round()
+
+        # Rotate the starting player for the next round
+        self.player_order.append(self.player_order.pop(0))
+
+    def _resolve_round(self):
+        """Determines loser and winner, and handles chip payout."""
+        print("\n--- Round Results ---")
+
+        # Calculate scores for all players
+        scores = {player: self._calculate_score(result['final_roll']) for player, result in self.round_results.items()}
+
+        for player, score_info in scores.items():
+            print(f"{player}: {score_info['name']}")
+
+        # Find the loser (lowest score) and winner (highest score)
+        loser = min(scores, key=lambda p: scores[p]['score'])
+        winner = max(scores, key=lambda p: scores[p]['score'])
+
+        # The payout is determined by the WINNER's hand
+        payout_amount = scores[winner]['payout']
+
+        print(f"\n{winner} had the highest hand ({scores[winner]['name']}).")
+        print(f"{loser} had the lowest hand and receives {payout_amount} chips from every other player.")
+
+        # Distribute chips
+        for player in self.players:
+            if player != loser:
+                self.players[player]['chips'] -= payout_amount
+                self.players[loser]['chips'] += payout_amount
+
+        self.print_scores()
+
+    def print_scores(self):
+        """Prints the current chip counts for all players."""
+        print("\n--- Current Chip Counts ---")
+        for player, data in self.players.items():
+            print(f"{player}: {data['chips']} chips")
+        print("---------------------------")
+
+    def check_for_winner(self):
+        """Checks if any player has run out of chips."""
+        for player, data in self.players.items():
+            if data['chips'] <= 0:
+                print(f"\n🎉 {player} has lost all their chips and is the winner! 🎉")
+                return player
+        return None
