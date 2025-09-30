@@ -356,6 +356,13 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                 for j, v in enumerate(final):
                     x = 220 + j * (die_size + spacing_x)
                     draw_die(screen, x, y - 6, die_size, v)
+                # render the computed hand name/score
+                score_info = GameManager._calculate_score(final)
+                try:
+                    score_txt = font.render(score_info.get('name', ''), True, (200, 200, 120))
+                    screen.blit(score_txt, (220, y + 18))
+                except Exception:
+                    pass
 
             y += 50
 
@@ -373,7 +380,7 @@ def main():
     # Show the intro/splash screen before the main menu
     try:
         from ui.intro_screen import IntroScreen
-        intro = IntroScreen(title='Zanzibar', subtitle='A Dice Game I paid $1,152.60 to have this team name', duration=5.0)
+        intro = IntroScreen(title='Zanzibar', subtitle='A Dice Game by I paid $1,152.60 to have this team name', duration=5.0)
         intro.run(screen)
     except Exception:
         # If intro fails for any reason, continue to the menu

@@ -37,26 +37,39 @@ class GameManager:
         """
         roll.sort()
 
-        # Zanzibar (4, 5, 6) - Highest rank
+        # Zanzibar (4,5,6) - highest
         if roll == [4, 5, 6]:
             return {'score': (4, 0), 'payout': 4, 'name': "Zanzibar!"}
 
-        # Three-of-a-kind - Second highest rank
+        # Three-of-a-kind - second highest. Rules rank 1-1-1 above 2-2-2 ... above 6-6-6.
         if roll[0] == roll[1] == roll[2]:
-            return {'score': (3, roll[0]), 'payout': 3, 'name': f"Three of a kind ({roll[0]}s)"}
+            # invert the pip value so that triple 1 > triple 2 > ... > triple 6
+            triple_rank = 7 - roll[0]
+            return {'score': (3, triple_rank), 'payout': 3, 'name': f"Three of a kind ({roll[0]}s)"}
 
-        # 1, 2, 3 - Third highest rank
+        # 1,2,3 - next best
         if roll == [1, 2, 3]:
             return {'score': (2, 0), 'payout': 2, 'name': "1-2-3"}
 
-        # Points total - Lowest rank
-        return {'score': (1, sum(roll)), 'payout': 1, 'name': f"Points total ({sum(roll)})"}
+        # Points total - lowest rank. Per common Zanzibar rules, 1s count as 100, 6s as 60,
+        # other faces count as their pip value.
+        def pip_value(d):
+            if d == 1:
+                return 100
+            if d == 6:
+                return 60
+            return d
+
+        pts = sum(pip_value(d) for d in roll)
+        return {'score': (1, pts), 'payout': 1, 'name': f"Points total ({pts})"}
 
     def _simulate_player_turn(self, max_rolls: int) -> dict:
         """Simulates a single player's turn, trying to get the best score."""
+        # initial roll
         current_roll = [random.randint(1, 6) for _ in range(3)]
 
-        for roll_num in range(1, max_rolls):
+        # roll_count tracks how many rolls have been used (1..max_rolls)
+        for roll_num in range(1, max_rolls + 1):
             score_info = self._calculate_score(current_roll)
             # Simple AI: Stop if score is high, otherwise re-roll.
             # A good hand (rank > 1) is worth keeping.
@@ -67,6 +80,10 @@ class GameManager:
             counts = Counter(current_roll)
             if 3 in counts.values():  # Three of a kind
                 return {'final_roll': current_roll, 'rolls_taken': roll_num}
+
+            # if we've already used the last roll, stop and return
+            if roll_num == max_rolls:
+                break
 
             kept_dice = []
             # Keep pairs
@@ -108,9 +125,6 @@ class GameManager:
 
         self._resolve_round()
 
-        # Rotate the starting player for the next round
-        self.player_order.append(self.player_order.pop(0))
-
     def _resolve_round(self):
         """Determines loser and winner, and handles chip payout."""
         print("\n--- Round Results ---")
@@ -138,6 +152,14 @@ class GameManager:
                 self.players[loser]['chips'] += payout_amount
 
         self.print_scores()
+
+        # Per rules: winner of the round rolls first next round. Rotate player_order
+        try:
+            idx = self.player_order.index(winner)
+            self.player_order = self.player_order[idx:] + self.player_order[:idx]
+        except ValueError:
+            # if something odd happened, leave order as-is
+            pass
 
     def print_scores(self):
         """Prints the current chip counts for all players."""
