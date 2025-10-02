@@ -18,12 +18,12 @@ import json
 import time
 import pygame
 import random
-from .audio.audio import AudioManager
-from .ui.start_menu import StartMenu
-from .ui.change_song_menu import ChangeSongMenu
-from .ui.audio_settings import AudioSettingsMenu
-from .cards.card import create_dice_rolls
-from .game.game_engine import GameManager
+from audio.audio import AudioManager
+from ui.start_menu import StartMenu
+from ui.change_song_menu import ChangeSongMenu
+from ui.audio_settings import AudioSettingsMenu
+from cards.card import create_dice_rolls
+from game.game_engine import GameManager
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -315,7 +315,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     if not setup:
         return
     player_names, starting_chips = setup
-    gm = GameManager(player_names, starting_chips)
+    gm = GameManager(player_names, starting_chips, screen=screen)
 
     # UI state
     running = True
@@ -359,7 +359,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                             except Exception:
                                 pass
                     # play a round  
-                    gm.play_round(screen)
+                    gm.play_round()
 
         # Draw the game state
         screen.fill((40, 40, 60))

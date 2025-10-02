@@ -194,7 +194,7 @@ class GameManager:
             winner_name=player,
             message="Master of Dice!"
         )
-        winner_screen.run(self.screen, audio_manager=AudioManager(audio_folder=r"uno_game\assets"))
+        winner_screen.run(self.screen, audio_manager=audio)
         pygame.time.delay(2000)
         pygame.quit()
         raise SystemExit
