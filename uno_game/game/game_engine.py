@@ -1,5 +1,7 @@
 import random
 from collections import Counter
+from audio.audio import AudioManager
+audio = AudioManager(audio_folder=r"uno_game\assets")
 
 
 class GameManager:
@@ -105,6 +107,7 @@ class GameManager:
     def play_round(self):
         """Plays one full round of Zanzibar."""
         print("\n--- Starting New Round ---")
+        audio.play_sound_effect("dice_b.wav", volume=0.8)
         self.round_results = {}
 
         # First player's turn sets the roll limit for others

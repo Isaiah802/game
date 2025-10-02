@@ -30,6 +30,7 @@ ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 SETTINGS_PATH = os.path.join(BASE_DIR, 'settings.json')
 
 
+
 def load_settings():
     defaults = {'music_file': 'test.mp3', 'music_volume': 0.6, 'sfx_volume': 1.0}
     try:
@@ -80,14 +81,17 @@ def draw_die(surface: pygame.Surface, x: int, y: int, size: int, value: int):
         pip(col_3, row_2)
 
 
+#============================This is for the test demo============================#
+#################################################################################################################33
 def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 10):
     clock = pygame.time.Clock()
     running = True
     rolls = create_dice_rolls(num_dice)
     font = pygame.font.SysFont('Arial', 20)
 
-    # try to play a roll sfx when rolling
-    sfx_name = 'mouse-click-290204.mp3'  # included asset
+    # pick a sound effect from the audio.sfx_folder
+    sfx_name = "cubes.mp3"
+    sfx_path = os.path.join(audio.sfx_folder, sfx_name)
 
     while running:
         for event in pygame.event.get():
@@ -98,43 +102,17 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
                 if event.key == pygame.K_r:
                     rolls = create_dice_rolls(num_dice)
                     # play sfx if available
-                    try:
-                        audio.play_sound_effect(sfx_name, volume=0.8)
-                    except Exception:
-                        pass
+                    if os.path.exists(sfx_path):
+                        print(f"[DiceDemo] Playing SFX: {sfx_name}")
+                        try:
+                            audio.play_sound_effect(sfx_name, volume=0.8)
+                        except Exception as e:
+                            print(f"[DiceDemo] Failed to play SFX: {e}")
+                    else:
+                        print(f"[DiceDemo] Missing SFX file: {sfx_path}")
                 elif event.key == pygame.K_ESCAPE:
                     running = False
 
-        # draw background
-        screen.fill((30, 140, 40))
-
-        # layout dice in two rows of up to 5
-        die_size = 80
-        die_spacing = 100
-        total_width = 5 * die_size + 4 * (die_spacing - die_size)
-        start_x = (screen.get_width() - total_width) // 2
-        top_y = 100
-        bottom_y = 220
-
-        for i, d in enumerate(rolls):
-            if i < 5:
-                x = start_x + i * die_spacing
-                y = top_y
-            else:
-                x = start_x + (i - 5) * die_spacing
-                y = bottom_y
-            draw_die(screen, x, y, die_size, d.get('value', 0))
-
-        total = sum(d.get('value', 0) for d in rolls)
-        txt = font.render(f"Roll total: {total}    (R to roll, Esc to return)", True, (255, 255, 255))
-        screen.blit(txt, (20, 20))
-
-        vals = ', '.join(str(d.get('value', '?')) for d in rolls)
-        txt2 = font.render("Values: " + vals, True, (255, 255, 255))
-        screen.blit(txt2, (20, 50))
-
-        pygame.display.flip()
-        clock.tick(60)
 
 
 def player_setup(screen: pygame.Surface):

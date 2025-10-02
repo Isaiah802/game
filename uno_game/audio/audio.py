@@ -47,6 +47,8 @@ class AudioManager:
         try:
             pygame.init()
             pygame.mixer.init()
+            pygame.mixer.set_num_channels(16)
+
         except Exception as e:
             print(f"[AudioManager] Pygame mixer init failed: {e}")
             self.available = False
