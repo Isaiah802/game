@@ -1,13 +1,16 @@
 import random
 from collections import Counter
 from audio.audio import AudioManager
+from ui.winner_page import *
+import pygame   
+
 audio = AudioManager(audio_folder=r"uno_game\assets")
 
 
 class GameManager:
     """Manages the state and logic of a Zanzibar dice game."""
 
-    def __init__(self, player_names: list, starting_chips: int = 20):
+    def __init__(self, player_names: list, starting_chips: int = 20, screen=None):
         """
         Initializes the Zanzibar game.
 
@@ -15,6 +18,8 @@ class GameManager:
             player_names: A list of names for the players.
             starting_chips: The number of chips each player starts with.
         """
+        self.screen = screen
+
         if len(player_names) < 2:
             raise ValueError("Zanzibar requires at least 2 players.")
 
@@ -128,6 +133,9 @@ class GameManager:
 
         self._resolve_round()
         self.check_for_winner()
+        winner = self.check_for_winner()
+        if winner:
+            self.winner_found(winner)
 
     def _resolve_round(self):
         """Determines loser and winner, and handles chip payout."""
@@ -181,5 +189,14 @@ class GameManager:
                 return player
         return None
 
-    def winner_found(player):
-        print(f"congradulations{player}")
+    def winner_found(self, player):
+        print(f"Congratulations {player}")
+        winner_screen = WinnerScreen(
+            winner_name=player,
+            message="Master of Dice!"
+        )
+        winner_screen.run(self.screen, audio_manager=AudioManager(audio_folder=r"uno_game\assets"))
+        pygame.time.delay(2000)
+        pygame.quit()
+        raise SystemExit
+

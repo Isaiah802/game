@@ -304,8 +304,8 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key == pygame.K_SPACE:
-                    # play a round
-                    gm.play_round()
+                    # play a round  
+                    gm.play_round(screen)
 
         # Draw the game state
         screen.fill((40, 40, 60))
@@ -341,7 +341,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                     screen.blit(score_txt, (220, y + 18))
                 except Exception:
                     pass
-
+  
             y += 50
 
         pygame.display.flip()
