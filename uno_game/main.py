@@ -17,12 +17,13 @@ import sys
 import json
 import time
 import pygame
-from audio.audio import AudioManager
-from ui.start_menu import StartMenu
-from ui.change_song_menu import ChangeSongMenu
-from ui.audio_settings import AudioSettingsMenu
-from cards.card import create_dice_rolls
-from game.game_engine import GameManager
+import random
+from .audio.audio import AudioManager
+from .ui.start_menu import StartMenu
+from .ui.change_song_menu import ChangeSongMenu
+from .ui.audio_settings import AudioSettingsMenu
+from .cards.card import create_dice_rolls
+from .game.game_engine import GameManager
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -315,9 +316,16 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         return
     player_names, starting_chips = setup
     gm = GameManager(player_names, starting_chips)
+
+    # UI state
     running = True
+    orig_size = screen.get_size()
     is_fullscreen = False
-    windowed_size = screen.get_size()
+    round_message = None
+    round_message_end = 0.0
+    animating = False
+    anim_end = 0.0
+    anim_duration = 0.8
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -326,22 +334,44 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
-                elif event.key == pygame.K_F11:
+                elif event.key in (pygame.K_f, pygame.K_F11):
                     # toggle fullscreen
-                    is_fullscreen = not is_fullscreen
-                    if is_fullscreen:
-                        info = pygame.display.Info()
-                        screen = pygame.display.set_mode((info.current_w, info.current_h), pygame.FULLSCREEN)
-                    else:
-                        screen = pygame.display.set_mode(windowed_size)
+                    try:
+                        if not is_fullscreen:
+                            screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+                            is_fullscreen = True
+                        else:
+                            screen = pygame.display.set_mode(orig_size)
+                            is_fullscreen = False
+                    except Exception:
+                        pass
                 elif event.key == pygame.K_SPACE:
-                    # play a round
-                    gm.play_round()
+                    # start dice roll animation; actual round runs after animation
+                    if not animating:
+                        animating = True
+                        anim_end = time.time() + anim_duration
+                        # play a roll sfx if available
+                        try:
+                            audio.play_sound_effect('dice_bounce.mp3', volume=0.8)
+                        except Exception:
+                            try:
+                                audio.play_sound_effect('whoosh.mp3', volume=0.6)
+                            except Exception:
+                                pass
 
         # Draw the game state
         screen.fill((40, 40, 60))
         header = font.render('Press Space to play next round, Esc to return to menu', True, (255, 255, 255))
         screen.blit(header, (20, 20))
+
+        # show transient round message (winner) if present
+        if round_message and time.time() < round_message_end:
+            rm_font = pygame.font.SysFont('Arial', 28, bold=True)
+            rm_surf = rm_font.render(round_message, True, (255, 220, 80))
+            rmr = rm_surf.get_rect(center=(screen.get_width() // 2, 60))
+            screen.blit(rm_surf, rmr)
+        else:
+            round_message = None
 
         # Render players and chips
         y = 80
@@ -351,38 +381,53 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
 
         for i, name in enumerate(gm.player_order):
             chips = gm.players.get(name, {}).get('chips', 0)
-            # draw chip stack at left
+            # draw chip stack at fixed left column, then render player text to the right of chips
             stack_rect = draw_chip_stack(screen, 20, y - 6, chips, chip_radius=8, max_display=10, font=font)
-
-            # render player name to the right of the chip stack
-            name_txt = font.render(f'{name}:', True, (230, 230, 230))
-            name_x = stack_rect.right + 8
-            screen.blit(name_txt, (name_x, y))
-            name_w = name_txt.get_width()
-
-            # place dice at least at the baseline x=220, or after the name
-            dice_start_x = max(220, name_x + name_w + 20)
+            try:
+                txt = font.render(f'{name}: {chips} chips', True, (230, 230, 230))
+                screen.blit(txt, (stack_rect.right + 8, y))
+            except Exception:
+                pass
 
             # Render final roll if available
             result = gm.round_results.get(name)
             if result:
                 final = result.get('final_roll', [])
                 for j, v in enumerate(final):
-                    x = dice_start_x + j * (die_size + spacing_x)
+                    x = 220 + j * (die_size + spacing_x)
                     draw_die(screen, x, y - 6, die_size, v)
-
-                # render the computed hand name/score below the dice
+                # render the computed hand name/score
                 score_info = GameManager._calculate_score(final)
                 try:
                     score_txt = font.render(score_info.get('name', ''), True, (200, 200, 120))
-                    screen.blit(score_txt, (dice_start_x, y + 18))
+                    screen.blit(score_txt, (220, y + 18))
                 except Exception:
                     pass
 
             y += 50
 
+        # If animating, draw rolling dice animation in the center area
+        if animating:
+            # draw three animated dice near the header
+            anim_die_size = 48
+            cx = screen.get_width() // 2 - (anim_die_size * 3 + spacing_x * 2) // 2
+            for k in range(3):
+                face = random.randint(1, 6)
+                draw_die(screen, cx + k * (anim_die_size + spacing_x), 100, anim_die_size, face)
+            # check animation end
+            if time.time() >= anim_end:
+                animating = False
+                # run actual round now
+                gm.play_round()
+                # compute winner for display
+                scores = {player: GameManager._calculate_score(res.get('final_roll', [])) for player, res in gm.round_results.items()}
+                if scores:
+                    winner = max(scores, key=lambda p: scores[p]['score'])
+                    round_message = f"Round winner: {winner} - {scores[winner]['name']}"
+                    round_message_end = time.time() + 3.0
+
         pygame.display.flip()
-        clock.tick(30)
+        clock.tick(60)
 
 def main():
     pygame.init()
