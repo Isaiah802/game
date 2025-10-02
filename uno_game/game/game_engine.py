@@ -127,6 +127,7 @@ class GameManager:
             print(f"{player} finished in {turn_result['rolls_taken']} roll(s) with {turn_result['final_roll']}")
 
         self._resolve_round()
+        self.check_for_winner()
 
     def _resolve_round(self):
         """Determines loser and winner, and handles chip payout."""
@@ -172,9 +173,13 @@ class GameManager:
         print("---------------------------")
 
     def check_for_winner(self):
+        print("Check for winner")
         """Checks if any player has run out of chips."""
         for player, data in self.players.items():
             if data['chips'] <= 0:
                 print(f"\n🎉 {player} has lost all their chips and is the winner! 🎉")
                 return player
         return None
+
+    def winner_found(player):
+        print(f"congradulations{player}")

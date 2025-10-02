@@ -81,7 +81,7 @@ def draw_die(surface: pygame.Surface, x: int, y: int, size: int, value: int):
         pip(col_3, row_2)
 
 
-#============================This is for the test demo============================#
+#============================This is for the test 
 #################################################################################################################33
 def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 10):
     clock = pygame.time.Clock()
