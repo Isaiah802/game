@@ -17,18 +17,18 @@ import sys
 import json
 import time
 import pygame
-from audio.audio import AudioManager
-from ui.start_menu import StartMenu
-from ui.change_song_menu import ChangeSongMenu
-from ui.audio_settings import AudioSettingsMenu
-from cards.card import create_dice_rolls
-from game.game_engine import GameManager
+import random
+from .audio.audio import AudioManager
+from .ui.start_menu import StartMenu
+from .ui.change_song_menu import ChangeSongMenu
+from .ui.audio_settings import AudioSettingsMenu
+from .cards.card import create_dice_rolls
+from .game.game_engine import GameManager
 
 
 BASE_DIR = os.path.dirname(__file__)
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 SETTINGS_PATH = os.path.join(BASE_DIR, 'settings.json')
-
 
 
 def load_settings():
@@ -81,17 +81,14 @@ def draw_die(surface: pygame.Surface, x: int, y: int, size: int, value: int):
         pip(col_3, row_2)
 
 
-#============================This is for the test 
-#################################################################################################################33
 def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 10):
     clock = pygame.time.Clock()
     running = True
     rolls = create_dice_rolls(num_dice)
     font = pygame.font.SysFont('Arial', 20)
 
-    # pick a sound effect from the audio.sfx_folder
-    sfx_name = "cubes.mp3"
-    sfx_path = os.path.join(audio.sfx_folder, sfx_name)
+    # try to play a roll sfx when rolling
+    sfx_name = 'mouse-click-290204.mp3'  # included asset
 
     while running:
         for event in pygame.event.get():
@@ -102,17 +99,43 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
                 if event.key == pygame.K_r:
                     rolls = create_dice_rolls(num_dice)
                     # play sfx if available
-                    if os.path.exists(sfx_path):
-                        print(f"[DiceDemo] Playing SFX: {sfx_name}")
-                        try:
-                            audio.play_sound_effect(sfx_name, volume=0.8)
-                        except Exception as e:
-                            print(f"[DiceDemo] Failed to play SFX: {e}")
-                    else:
-                        print(f"[DiceDemo] Missing SFX file: {sfx_path}")
+                    try:
+                        audio.play_sound_effect(sfx_name, volume=0.8)
+                    except Exception:
+                        pass
                 elif event.key == pygame.K_ESCAPE:
                     running = False
 
+        # draw background
+        screen.fill((30, 140, 40))
+
+        # layout dice in two rows of up to 5
+        die_size = 80
+        die_spacing = 100
+        total_width = 5 * die_size + 4 * (die_spacing - die_size)
+        start_x = (screen.get_width() - total_width) // 2
+        top_y = 100
+        bottom_y = 220
+
+        for i, d in enumerate(rolls):
+            if i < 5:
+                x = start_x + i * die_spacing
+                y = top_y
+            else:
+                x = start_x + (i - 5) * die_spacing
+                y = bottom_y
+            draw_die(screen, x, y, die_size, d.get('value', 0))
+
+        total = sum(d.get('value', 0) for d in rolls)
+        txt = font.render(f"Roll total: {total}    (R to roll, Esc to return)", True, (255, 255, 255))
+        screen.blit(txt, (20, 20))
+
+        vals = ', '.join(str(d.get('value', '?')) for d in rolls)
+        txt2 = font.render("Values: " + vals, True, (255, 255, 255))
+        screen.blit(txt2, (20, 50))
+
+        pygame.display.flip()
+        clock.tick(60)
 
 
 def player_setup(screen: pygame.Surface):
@@ -294,7 +317,15 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     player_names, starting_chips = setup
     gm = GameManager(player_names, starting_chips)
 
+    # UI state
     running = True
+    orig_size = screen.get_size()
+    is_fullscreen = False
+    round_message = None
+    round_message_end = 0.0
+    animating = False
+    anim_end = 0.0
+    anim_duration = 0.8
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -303,7 +334,30 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
                     running = False
+                elif event.key in (pygame.K_f, pygame.K_F11):
+                    # toggle fullscreen
+                    try:
+                        if not is_fullscreen:
+                            screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+                            is_fullscreen = True
+                        else:
+                            screen = pygame.display.set_mode(orig_size)
+                            is_fullscreen = False
+                    except Exception:
+                        pass
                 elif event.key == pygame.K_SPACE:
+                    # start dice roll animation; actual round runs after animation
+                    if not animating:
+                        animating = True
+                        anim_end = time.time() + anim_duration
+                        # play a roll sfx if available
+                        try:
+                            audio.play_sound_effect('dice_bounce.mp3', volume=0.8)
+                        except Exception:
+                            try:
+                                audio.play_sound_effect('whoosh.mp3', volume=0.6)
+                            except Exception:
+                                pass
                     # play a round  
                     gm.play_round(screen)
 
@@ -311,6 +365,15 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         screen.fill((40, 40, 60))
         header = font.render('Press Space to play next round, Esc to return to menu', True, (255, 255, 255))
         screen.blit(header, (20, 20))
+
+        # show transient round message (winner) if present
+        if round_message and time.time() < round_message_end:
+            rm_font = pygame.font.SysFont('Arial', 28, bold=True)
+            rm_surf = rm_font.render(round_message, True, (255, 220, 80))
+            rmr = rm_surf.get_rect(center=(screen.get_width() // 2, 60))
+            screen.blit(rm_surf, rmr)
+        else:
+            round_message = None
 
         # Render players and chips
         y = 80
@@ -320,12 +383,13 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
 
         for i, name in enumerate(gm.player_order):
             chips = gm.players.get(name, {}).get('chips', 0)
-            txt = font.render(f'{name}:', True, (230, 230, 230))
-            screen.blit(txt, (20, y))
-            # draw chip stack to the right of the name
-            name_w = txt.get_width()
-            stack_x = 20 + name_w + 12
-            draw_chip_stack(screen, stack_x, y - 6, chips, chip_radius=8, max_display=10, font=font)
+            # draw chip stack at fixed left column, then render player text to the right of chips
+            stack_rect = draw_chip_stack(screen, 20, y - 6, chips, chip_radius=8, max_display=10, font=font)
+            try:
+                txt = font.render(f'{name}: {chips} chips', True, (230, 230, 230))
+                screen.blit(txt, (stack_rect.right + 8, y))
+            except Exception:
+                pass
 
             # Render final roll if available
             result = gm.round_results.get(name)
@@ -344,8 +408,28 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
   
             y += 50
 
+        # If animating, draw rolling dice animation in the center area
+        if animating:
+            # draw three animated dice near the header
+            anim_die_size = 48
+            cx = screen.get_width() // 2 - (anim_die_size * 3 + spacing_x * 2) // 2
+            for k in range(3):
+                face = random.randint(1, 6)
+                draw_die(screen, cx + k * (anim_die_size + spacing_x), 100, anim_die_size, face)
+            # check animation end
+            if time.time() >= anim_end:
+                animating = False
+                # run actual round now
+                gm.play_round()
+                # compute winner for display
+                scores = {player: GameManager._calculate_score(res.get('final_roll', [])) for player, res in gm.round_results.items()}
+                if scores:
+                    winner = max(scores, key=lambda p: scores[p]['score'])
+                    round_message = f"Round winner: {winner} - {scores[winner]['name']}"
+                    round_message_end = time.time() + 3.0
+
         pygame.display.flip()
-        clock.tick(30)
+        clock.tick(60)
 
 def main():
     pygame.init()
@@ -355,24 +439,24 @@ def main():
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))
     pygame.display.set_caption("Game - Launcher")
 
-    # load settings and initialize audio (do this before intro so intro can play a clip)
+    # Show the intro/splash screen before the main menu
+    try:
+        from ui.intro_screen import IntroScreen
+        intro = IntroScreen(title='Zanzibar', subtitle='A Dice Game by I paid $1,152.60 to have this team name', duration=5.0)
+        intro.run(screen)
+    except Exception:
+        # If intro fails for any reason, continue to the menu
+        pass
+
+    menu = StartMenu(screen, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
+
+    # load settings and initialize audio
     settings = load_settings()
     audio = AudioManager(audio_folder=ASSETS_DIR)
     try:
         audio.set_sfx_volume(settings.get('sfx_volume', 1.0))
     except Exception:
         pass
-
-    # Show the intro/splash screen before the main menu
-    try:
-        from ui.intro_screen import IntroScreen
-        intro = IntroScreen(title='Zanzibar', subtitle='A Dice Game by I paid $1,152.60 to have this team name', duration=5.0)
-        intro.run(screen, audio_manager=audio)
-    except Exception:
-        # If intro fails for any reason, continue to the menu
-        pass
-
-    menu = StartMenu(screen, width=WINDOW_WIDTH, height=WINDOW_HEIGHT)
     music_file = settings.get('music_file', 'test.mp3')
     music_vol = settings.get('music_volume', 0.6)
     audio.play_music(music_file, loop=True, volume=music_vol)

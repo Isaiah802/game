@@ -181,7 +181,6 @@ class GameManager:
         print("---------------------------")
 
     def check_for_winner(self):
-        print("Check for winner")
         """Checks if any player has run out of chips."""
         for player, data in self.players.items():
             if data['chips'] <= 0:
