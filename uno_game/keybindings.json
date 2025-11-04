@@ -1,0 +1,18 @@
+{
+    "keybindings": {
+        "inventory": 105,
+        "roll_dice": 114,
+        "menu": 27,
+        "fullscreen": 102,
+        "confirm": 13,
+        "back": 27,
+        "up": 273,
+        "down": 274,
+        "left": 276,
+        "right": 275
+    },
+    "audio": {
+        "music_volume": 0.6,
+        "sfx_volume": 1.0
+    }
+}
