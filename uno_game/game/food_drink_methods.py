@@ -1,19 +1,20 @@
-    def use_item(self, player_name: str, item_name: str) -> bool:
-        """Have a player use a food/drink item."""
-        if player_name not in self.players:
-            return False
-            
-        player_data = self.players[player_name]
-        item = registry.get_item(item_name)
-        if not item:
-            return False
-            
-        if player_data['inventory'].use_item(item):
-            # Apply energy boost
-            player_data['energy'] = min(100, player_data['energy'] + item.energy_value)
-            return True
+def use_item(self, player_name: str, item_name: str) -> bool:
+    """Have a player use a food/drink item."""
+    if player_name not in self.players:
         return False
+        
+    player_data = self.players[player_name]
+    item = registry.get_item(item_name)
+    if not item:
+        return False
+        
+    if player_data['inventory'].use_item(item):
+        # Apply energy boost
+        player_data['energy'] = min(100, player_data['energy'] + item.energy_value)
+        return True
+    return False
     
+
     def update_effects(self):
         """Update effects for all players (call each turn)."""
         for player_data in self.players.values():

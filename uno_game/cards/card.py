@@ -105,4 +105,6 @@ if __name__ == "__main__":
         draw_die(main_pen, die_x, die_y, die_to_draw)
 
     screen.update()
+
+    
     screen.exitonclick()
