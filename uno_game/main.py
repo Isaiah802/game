@@ -528,7 +528,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                 pygame.display.flip()
                 clock.tick(60)
             
-            shop_running = False
+            show_shop = False
 
         # Draw the game state
         screen.fill((40, 40, 60))

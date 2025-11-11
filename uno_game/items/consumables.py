@@ -44,7 +44,7 @@ class ItemRegistry:
             energy_value=50,
             effects=[Effect.ENERGY_BOOST],
             duration=3,
-            cost=100
+            cost=1
         ))
         
         self.add_item(ConsumableItem(
@@ -54,7 +54,7 @@ class ItemRegistry:
             energy_value=20,
             effects=[Effect.LUCK_BOOST],
             duration=2,
-            cost=150
+            cost=1
         ))
         
         self.add_item(ConsumableItem(
