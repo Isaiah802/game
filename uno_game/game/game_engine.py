@@ -2,13 +2,14 @@ import random
 from collections import Counter
 from audio.audio import AudioManager
 from ui.winner_page import *
-import pygame   
+import pygame
+from .food_drink_methods import FoodDrinkMixin
 
 audio = AudioManager(audio_folder=r"uno_game\assets")
 
 
-class GameManager:
-    """Manages the state and logic of a Zanzibar dice game."""
+class GameManager(FoodDrinkMixin):
+    """Manages the state and logic of a Zanzibar dice game with food/drink support."""
 
     def __init__(self, player_names: list, starting_chips: int = 20, screen=None):
         """
