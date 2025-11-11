@@ -3,7 +3,7 @@ UI for changing game keybindings.
 """
 import pygame
 from typing import Dict, Optional, Tuple
-from ..settings import Settings, KEY_NAMES
+from settings import Settings, KEY_NAMES
 
 class KeybindingsMenu:
     """Menu for viewing and changing game keybindings."""
@@ -15,7 +15,7 @@ class KeybindingsMenu:
         self.small_font = pygame.font.SysFont('Arial', 20)
         
         # Colors
-        self.bg_color = (20, 20, 30, 220)
+        self.bg_color = (20, 20, 30)  # Solid background instead of semi-transparent
         self.text_color = (220, 220, 220)
         self.selected_color = (255, 255, 255)
         self.key_color = (100, 200, 255)
@@ -28,86 +28,84 @@ class KeybindingsMenu:
         # Initialize selected action to first keybinding
         self.selected_action = next(iter(self.settings.keybindings.keys()), None)
         
-        # Action descriptions
+        # Simplified action descriptions (shorter)
         self.action_descriptions = {
-            'inventory': 'Open food & drinks menu',
-            'roll_dice': 'Roll the dice',
-            'menu': 'Open game menu',
-            'fullscreen': 'Toggle fullscreen',
-            'confirm': 'Confirm selection',
-            'back': 'Go back/cancel',
-            'up': 'Navigate up',
-            'down': 'Navigate down',
-            'left': 'Navigate left',
-            'right': 'Navigate right'
+            'inventory': 'Food & Drinks',
+            'roll_dice': 'Roll Dice',
+            'menu': 'Menu',
+            'fullscreen': 'Fullscreen',
+            'confirm': 'Confirm',
+            'back': 'Cancel',
+            'up': 'Up',
+            'down': 'Down',
+            'left': 'Left',
+            'right': 'Right'
         }
     
     def draw_binding(self, action: str, key: int, pos: Tuple[int, int], selected: bool = False):
         """Draw a single keybinding."""
         x, y = pos
-        width = 500
+        width = 640
         height = 40
         
         # Background for selected item
         if selected:
-            pygame.draw.rect(self.screen, (40, 40, 60), (x-5, y-5, width+10, height+10))
+            pygame.draw.rect(self.screen, (60, 80, 120), (x-5, y-5, width+10, height+10), border_radius=5)
         
-        # Action name and description
+        # Action name
         action_text = action.replace('_', ' ').title()
-        desc = self.action_descriptions.get(action, '')
-        action_surf = self.font.render(f"{action_text}: {desc}", True, 
+        desc = self.action_descriptions.get(action, action_text)
+        action_surf = self.font.render(f"{desc}", True, 
                                      self.selected_color if selected else self.action_color)
-        self.screen.blit(action_surf, (x, y))
+        self.screen.blit(action_surf, (x, y + 10))
         
-        # Key name
+        # Key name (on the right)
         key_name = self.settings.get_key_name(key)
         if self.waiting_for_key and selected:
             key_name = "Press any key..."
         key_surf = self.font.render(key_name, True, 
-                                  self.selected_color if selected else self.key_color)
+                                  (255, 255, 100) if selected else self.key_color)
         key_rect = key_surf.get_rect(right=x + width - 10, centery=y + height//2)
         self.screen.blit(key_surf, key_rect)
     
     def draw(self):
         """Draw the keybindings menu."""
-        width = 600
-        height = 500
+        width = 700
+        height = 550
         x = (self.screen.get_width() - width) // 2
         y = (self.screen.get_height() - height) // 2
         
-        # Semi-transparent background
-        surface = pygame.Surface((width, height), pygame.SRCALPHA)
-        pygame.draw.rect(surface, self.bg_color, (0, 0, width, height))
+        # Solid background
+        pygame.draw.rect(self.screen, self.bg_color, (x, y, width, height))
+        pygame.draw.rect(self.screen, (100, 100, 120), (x, y, width, height), 3)  # Border
         
         # Title
         title = self.font.render("Keybindings", True, self.text_color)
-        surface.blit(title, ((width - title.get_width()) // 2, 20))
+        self.screen.blit(title, (x + (width - title.get_width()) // 2, y + 20))
         
         # Instructions
         if self.waiting_for_key:
             inst = self.small_font.render("Press any key to bind, ESC to cancel", True, self.text_color)
         else:
-            inst = self.small_font.render("Select a binding to change, R to reset all", True, self.text_color)
-        surface.blit(inst, ((width - inst.get_width()) // 2, 60))
+            inst = self.small_font.render("Arrow keys: Navigate | Enter: Change | R: Reset | ESC: Back", True, self.text_color)
+        self.screen.blit(inst, (x + (width - inst.get_width()) // 2, y + 60))
         
         # Draw keybindings
-        y_pos = 100
+        y_pos = y + 100
         visible_actions = list(self.settings.keybindings.items())[self.scroll_offset:
                                                                 self.scroll_offset + self.max_visible_bindings]
         
         for action, key in visible_actions:
-            self.draw_binding(action, key, (20, y_pos), action == self.selected_action)
+            self.draw_binding(action, key, (x + 30, y_pos), action == self.selected_action)
             y_pos += 50
         
         # Scroll indicators
         if self.scroll_offset > 0:
-            pygame.draw.polygon(surface, self.text_color, 
-                             [(width//2, 80), (width//2 - 10, 70), (width//2 + 10, 70)])
+            pygame.draw.polygon(self.screen, self.text_color, 
+                             [(x + width//2, y + 85), (x + width//2 - 10, y + 75), (x + width//2 + 10, y + 75)])
         if self.scroll_offset + self.max_visible_bindings < len(self.settings.keybindings):
-            pygame.draw.polygon(surface, self.text_color,
-                             [(width//2, height-20), (width//2 - 10, height-30), (width//2 + 10, height-30)])
-        
-        self.screen.blit(surface, (x, y))
+            pygame.draw.polygon(self.screen, self.text_color,
+                             [(x + width//2, y + height - 15), (x + width//2 - 10, y + height - 25), (x + width//2 + 10, y + height - 25)])
     
     def handle_event(self, event: pygame.event.Event) -> bool:
         """Handle input events. Returns True if menu should close."""

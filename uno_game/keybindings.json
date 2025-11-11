@@ -1,18 +1,19 @@
 {
-    "keybindings": {
-        "inventory": 105,
-        "roll_dice": 114,
-        "menu": 27,
-        "fullscreen": 102,
-        "confirm": 13,
-        "back": 27,
-        "up": 273,
-        "down": 274,
-        "left": 276,
-        "right": 275
-    },
-    "audio": {
-        "music_volume": 0.6,
-        "sfx_volume": 1.0
-    }
+  "keybindings": {
+    "inventory": 105,
+    "roll_dice": 32,
+    "menu": 27,
+    "fullscreen": 102,
+    "confirm": 13,
+    "back": 8,
+    "up": 1073741906,
+    "down": 1073741905,
+    "left": 1073741904,
+    "right": 1073741903
+  },
+  "settings": {
+    "music_volume": 0.6,
+    "sfx_volume": 1.0,
+    "fullscreen": false
+  }
 }

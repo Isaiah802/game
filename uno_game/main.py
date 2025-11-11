@@ -22,8 +22,13 @@ from audio.audio import AudioManager
 from ui.start_menu import StartMenu
 from ui.change_song_menu import ChangeSongMenu
 from ui.audio_settings import AudioSettingsMenu
+from ui.keybindings_menu import KeybindingsMenu
+from ui.shop_menu import ShopMenu
+from ui.consumables_menu import ConsumablesMenu
 from cards.card import create_dice_rolls
 from game.game_engine import GameManager
+from settings import Settings
+from items import registry
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -304,6 +309,8 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
 
     Controls:
     - Space: Play next round
+    - I: Open inventory/consumables menu
+    - S: Open shop menu
     - Esc: Return to menu
     """
     clock = pygame.time.Clock()
@@ -316,6 +323,9 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         return
     player_names, starting_chips = setup
     gm = GameManager(player_names, starting_chips, screen=screen)
+    
+    # Initialize game settings for keybindings
+    game_settings = Settings()
 
     # UI state
     running = True
@@ -326,6 +336,13 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     animating = False
     anim_end = 0.0
     anim_duration = 0.8
+    
+    # Track current player (for shop/inventory)
+    current_player_idx = 0
+    
+    # Menu states
+    show_inventory = False
+    show_shop = False
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -345,6 +362,15 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                             is_fullscreen = False
                     except Exception:
                         pass
+                elif event.key == pygame.K_i:
+                    # Open inventory menu
+                    show_inventory = True
+                elif event.key == pygame.K_s:
+                    # Open shop menu
+                    show_shop = True
+                elif event.key == pygame.K_TAB:
+                    # Switch current player
+                    current_player_idx = (current_player_idx + 1) % len(player_names)
                 elif event.key == pygame.K_SPACE:
                     # start dice roll animation; actual round runs after animation
                     if not animating:
@@ -360,10 +386,154 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                                 pass
                     # play a round  
                     gm.play_round()
+        
+        # Handle inventory menu
+        if show_inventory:
+            current_player = player_names[current_player_idx]
+            player_data = gm.players[current_player]
+            
+            # Initialize inventory if not present
+            if 'inventory' not in player_data:
+                from items import Inventory
+                player_data['inventory'] = Inventory()
+            
+            inventory_menu = ConsumablesMenu(screen, player_data['inventory'])
+            
+            # Get items as ConsumableItem objects
+            items = []
+            for item_name, quantity in player_data['inventory'].get_all_items().items():
+                item = registry.get_item(item_name)
+                if item and quantity > 0:
+                    items.append(item)
+            
+            if items:
+                inventory_menu.selected_item = items[0]
+            
+            inv_running = True
+            while inv_running:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            inv_running = False
+                        elif event.key == pygame.K_RETURN and inventory_menu.selected_item:
+                            # Use the selected item
+                            if gm.use_item(current_player, inventory_menu.selected_item.name):
+                                # Refresh items list
+                                items = []
+                                for item_name, quantity in player_data['inventory'].get_all_items().items():
+                                    item = registry.get_item(item_name)
+                                    if item and quantity > 0:
+                                        items.append(item)
+                                # Update selected item
+                                if items:
+                                    inventory_menu.selected_item = items[0]
+                                else:
+                                    inventory_menu.selected_item = None
+                        elif event.key == pygame.K_UP:
+                            if items and inventory_menu.selected_item:
+                                idx = items.index(inventory_menu.selected_item)
+                                if idx > 0:
+                                    inventory_menu.selected_item = items[idx - 1]
+                                    if idx - 1 < inventory_menu.scroll_offset:
+                                        inventory_menu.scroll_offset = idx - 1
+                            elif items:
+                                inventory_menu.selected_item = items[0]
+                        elif event.key == pygame.K_DOWN:
+                            if items and inventory_menu.selected_item:
+                                idx = items.index(inventory_menu.selected_item)
+                                if idx < len(items) - 1:
+                                    inventory_menu.selected_item = items[idx + 1]
+                                    if idx + 1 >= inventory_menu.scroll_offset + inventory_menu.max_items_shown:
+                                        inventory_menu.scroll_offset = idx + 1 - inventory_menu.max_items_shown + 1
+                            elif items:
+                                inventory_menu.selected_item = items[0]
+                
+                screen.fill((20, 20, 30))
+                if not items:
+                    # Show empty inventory message
+                    empty_font = pygame.font.SysFont('Arial', 24)
+                    msg = empty_font.render("Inventory is empty! Press S to shop.", True, (220, 220, 220))
+                    msg_rect = msg.get_rect(center=(screen.get_width()//2, screen.get_height()//2))
+                    screen.blit(msg, msg_rect)
+                else:
+                    inventory_menu.draw(items)
+                pygame.display.flip()
+                clock.tick(60)
+            
+            show_inventory = False
+        
+        # Handle shop menu
+        if show_shop:
+            current_player = player_names[current_player_idx]
+            player_data = gm.players[current_player]
+            player_chips = player_data.get('chips', 0)
+            
+            # Initialize inventory if not present
+            if 'inventory' not in player_data:
+                from items import Inventory
+                player_data['inventory'] = Inventory()
+            
+            shop_menu = ShopMenu(screen, player_chips, game_settings)
+            available_items = list(registry.items.values())
+            if available_items:
+                shop_menu.selected_item = available_items[0]
+            
+            shop_running = True
+            while shop_running:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                    elif event.type == pygame.KEYDOWN:
+                        if event.key == pygame.K_ESCAPE:
+                            shop_running = False
+                        elif event.key == pygame.K_RETURN and shop_menu.selected_item:
+                            # Try to buy the item
+                            item = shop_menu.selected_item
+                            if player_data['chips'] >= item.cost:
+                                player_data['chips'] -= item.cost
+                                player_data['inventory'].add_item(item)
+                                shop_menu.player_chips = player_data['chips']
+                                shop_menu.message = f"Bought {item.name}!"
+                                shop_menu.message_color = shop_menu.success_color
+                                shop_menu.message_timer = pygame.time.get_ticks() + 2000
+                            else:
+                                shop_menu.message = "Not enough chips!"
+                                shop_menu.message_color = shop_menu.error_color
+                                shop_menu.message_timer = pygame.time.get_ticks() + 2000
+                        elif event.key == pygame.K_UP:
+                            if available_items and shop_menu.selected_item:
+                                idx = available_items.index(shop_menu.selected_item)
+                                if idx > 0:
+                                    shop_menu.selected_item = available_items[idx - 1]
+                                    if idx - 1 < shop_menu.scroll_offset:
+                                        shop_menu.scroll_offset = idx - 1
+                            elif available_items:
+                                shop_menu.selected_item = available_items[0]
+                        elif event.key == pygame.K_DOWN:
+                            if available_items and shop_menu.selected_item:
+                                idx = available_items.index(shop_menu.selected_item)
+                                if idx < len(available_items) - 1:
+                                    shop_menu.selected_item = available_items[idx + 1]
+                                    if idx + 1 >= shop_menu.scroll_offset + shop_menu.max_items_shown:
+                                        shop_menu.scroll_offset = idx + 1 - shop_menu.max_items_shown + 1
+                            elif available_items:
+                                shop_menu.selected_item = available_items[0]
+                
+                screen.fill((20, 20, 30))
+                shop_menu.draw(available_items)
+                pygame.display.flip()
+                clock.tick(60)
+            
+            shop_running = False
 
         # Draw the game state
         screen.fill((40, 40, 60))
-        header = font.render('Press Space to play next round, Esc to return to menu', True, (255, 255, 255))
+        current_player = player_names[current_player_idx]
+        header = font.render(f'Current Player: {current_player} | Space: Roll | I: Inventory | S: Shop | Tab: Switch Player | Esc: Menu', True, (255, 255, 255))
         screen.blit(header, (20, 20))
 
         # show transient round message (winner) if present
@@ -452,6 +622,7 @@ def main():
 
     # load settings and initialize audio
     settings = load_settings()
+    game_settings = Settings()  # Initialize game settings (keybindings, etc.)
     audio = AudioManager(audio_folder=ASSETS_DIR)
     try:
         audio.set_sfx_volume(settings.get('sfx_volume', 1.0))
@@ -489,6 +660,25 @@ def main():
                     audio.set_music_volume(s.get('music_volume', 0.6))
                 except Exception:
                     pass
+            continue
+        elif choice == 'keybindings':
+            # Show keybindings menu
+            keybindings_menu = KeybindingsMenu(screen, game_settings)
+            clock = pygame.time.Clock()
+            kb_running = True
+            while kb_running:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                    if keybindings_menu.handle_event(event):
+                        kb_running = False
+                
+                # Clear screen with a solid background
+                screen.fill((15, 15, 20))
+                keybindings_menu.draw()
+                pygame.display.flip()
+                clock.tick(60)
             continue
         elif choice == 'quit':
             break

@@ -4,7 +4,7 @@ UI for displaying and managing food and drinks.
 import os
 import pygame
 from typing import Optional, List, Tuple, Callable
-from ..items import ConsumableItem, Inventory, ItemType
+from items import ConsumableItem, Inventory, ItemType
 
 class ConsumablesMenu:
     """A menu for displaying and using food and drink items."""
@@ -19,7 +19,7 @@ class ConsumablesMenu:
         self.max_items_shown = 4
         
         # Colors
-        self.bg_color = (20, 20, 30, 200)  # Semi-transparent dark blue
+        self.bg_color = (20, 20, 30)  # Solid background
         self.food_color = (200, 150, 50)    # Warm yellow for food
         self.drink_color = (50, 150, 200)   # Cool blue for drinks
         self.selected_color = (255, 255, 255)
@@ -71,32 +71,36 @@ class ConsumablesMenu:
     
     def draw(self, items: List[ConsumableItem]):
         """Draw the consumables menu."""
-        width = 320
-        height = 400
+        width = 650
+        height = 500
         x = (self.screen.get_width() - width) // 2
         y = (self.screen.get_height() - height) // 2
         
-        # Draw menu background
-        surface = pygame.Surface((width, height), pygame.SRCALPHA)
-        pygame.draw.rect(surface, self.bg_color, (0, 0, width, height))
+        # Solid background
+        pygame.draw.rect(self.screen, self.bg_color, (x, y, width, height))
+        pygame.draw.rect(self.screen, (100, 100, 120), (x, y, width, height), 3)  # Border
         
         # Draw title
-        title_surf = self.font.render("Food & Drinks", True, self.text_color)
-        surface.blit(title_surf, ((width - title_surf.get_width()) // 2, 10))
+        title_surf = self.font.render("Food & Drinks Inventory", True, self.text_color)
+        self.screen.blit(title_surf, (x + (width - title_surf.get_width()) // 2, y + 15))
+        
+        # Instructions
+        inst_surf = self.small_font.render("Arrow keys: Navigate | ENTER: Use item | ESC: Close", True, self.text_color)
+        self.screen.blit(inst_surf, (x + (width - inst_surf.get_width()) // 2, y + 45))
         
         # Draw items
-        item_y = 50
+        item_y = y + 80
         for i, item in enumerate(items[self.scroll_offset:self.scroll_offset + self.max_items_shown]):
-            self.draw_item(item, (10, item_y), item == self.selected_item)
+            self.draw_item(item, (x + 10, item_y), item == self.selected_item)
             item_y += 90
         
         # Draw scroll indicators if needed
         if self.scroll_offset > 0:
-            pygame.draw.polygon(surface, self.text_color, [(width//2, 40), (width//2-10, 30), (width//2+10, 30)])
+            pygame.draw.polygon(self.screen, self.text_color, 
+                             [(x + width//2, y + 70), (x + width//2-10, y + 60), (x + width//2+10, y + 60)])
         if self.scroll_offset + self.max_items_shown < len(items):
-            pygame.draw.polygon(surface, self.text_color, [(width//2, height-20), (width//2-10, height-30), (width//2+10, height-30)])
-        
-        self.screen.blit(surface, (x, y))
+            pygame.draw.polygon(self.screen, self.text_color, 
+                             [(x + width//2, y + height-20), (x + width//2-10, y + height-30), (x + width//2+10, y + height-30)])
     
     def handle_event(self, event: pygame.event.Event, items: List[ConsumableItem]) -> Optional[ConsumableItem]:
         """Handle input events. Returns the item to use if one was selected."""

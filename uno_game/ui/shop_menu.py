@@ -3,8 +3,8 @@ UI for the food and drink shop.
 """
 import pygame
 from typing import Optional, List, Tuple
-from ..items import ConsumableItem, ItemRegistry, registry
-from ..settings import Settings
+from items import ConsumableItem, ItemRegistry, registry
+from settings import Settings
 
 class ShopMenu:
     """A menu for buying food and drinks."""
@@ -17,7 +17,7 @@ class ShopMenu:
         self.small_font = pygame.font.SysFont('Arial', 20)
         
         # Colors
-        self.bg_color = (20, 20, 30, 220)
+        self.bg_color = (20, 20, 30)  # Solid background
         self.text_color = (220, 220, 220)
         self.selected_color = (255, 255, 255)
         self.price_color = (255, 215, 0)  # Gold color for prices
@@ -57,57 +57,55 @@ class ShopMenu:
         
     def draw(self, items: List[ConsumableItem]):
         """Draw the shop menu."""
-        width = 600
-        height = 500
+        width = 650
+        height = 550
         x = (self.screen.get_width() - width) // 2
         y = (self.screen.get_height() - height) // 2
         
-        # Semi-transparent background
-        surface = pygame.Surface((width, height), pygame.SRCALPHA)
-        pygame.draw.rect(surface, self.bg_color, (0, 0, width, height))
+        # Solid background
+        pygame.draw.rect(self.screen, self.bg_color, (x, y, width, height))
+        pygame.draw.rect(self.screen, (100, 100, 120), (x, y, width, height), 3)  # Border
         
         # Title and chips
         title = self.font.render("Food & Drinks Shop", True, self.text_color)
-        surface.blit(title, ((width - title.get_width()) // 2, 20))
+        self.screen.blit(title, (x + (width - title.get_width()) // 2, y + 20))
         
         chips = self.font.render(f"Your chips: {self.player_chips}", True, self.price_color)
-        surface.blit(chips, (20, 60))
+        self.screen.blit(chips, (x + 20, y + 60))
         
         # Instructions
         if self.selected_item:
             inst = self.small_font.render(
-                f"Press ENTER to buy {self.selected_item.name} for {self.selected_item.cost} chips",
+                f"ENTER: Buy {self.selected_item.name} ({self.selected_item.cost} chips) | ESC: Exit",
                 True, self.text_color
             )
         else:
             inst = self.small_font.render(
-                "Select an item to buy, ESC to exit",
+                "Arrow keys: Navigate | ENTER: Buy | ESC: Exit",
                 True, self.text_color
             )
-        surface.blit(inst, ((width - inst.get_width()) // 2, 90))
+        self.screen.blit(inst, (x + (width - inst.get_width()) // 2, y + 90))
         
         # Message (if any)
         if self.message and pygame.time.get_ticks() < self.message_timer:
             msg_surf = self.font.render(self.message, True, self.message_color)
-            msg_rect = msg_surf.get_rect(centerx=width//2, bottom=height-20)
-            surface.blit(msg_surf, msg_rect)
+            msg_rect = msg_surf.get_rect(centerx=x + width//2, y=y + height - 40)
+            self.screen.blit(msg_surf, msg_rect)
         
         # Draw items
-        y_pos = 130
+        y_pos = y + 130
         visible_items = items[self.scroll_offset:self.scroll_offset + self.max_items_shown]
         for item in visible_items:
-            self.draw_item(item, (20, y_pos), item == self.selected_item)
+            self.draw_item(item, (x + 20, y_pos), item == self.selected_item)
             y_pos += 70
         
         # Scroll indicators
         if self.scroll_offset > 0:
-            pygame.draw.polygon(surface, self.text_color, 
-                             [(width//2, 120), (width//2-10, 110), (width//2+10, 110)])
+            pygame.draw.polygon(self.screen, self.text_color, 
+                             [(x + width//2, y + 120), (x + width//2-10, y + 110), (x + width//2+10, y + 110)])
         if self.scroll_offset + self.max_items_shown < len(items):
-            pygame.draw.polygon(surface, self.text_color,
-                             [(width//2, height-40), (width//2-10, height-50), (width//2+10, height-50)])
-        
-        self.screen.blit(surface, (x, y))
+            pygame.draw.polygon(self.screen, self.text_color,
+                             [(x + width//2, y + height-40), (x + width//2-10, y + height-50), (x + width//2+10, y + height-50)])
     
     def show_message(self, message: str, is_error: bool = False):
         """Show a temporary message."""
