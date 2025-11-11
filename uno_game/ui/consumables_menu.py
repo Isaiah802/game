@@ -4,7 +4,7 @@ UI for displaying and managing food and drinks.
 import os
 import pygame
 from typing import Optional, List, Tuple, Callable
-from ..items import ConsumableItem, Inventory, ItemType
+from items import ConsumableItem, Inventory, ItemType
 
 class ConsumablesMenu:
     """A menu for displaying and using food and drink items."""

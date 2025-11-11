@@ -3,8 +3,8 @@ UI for the food and drink shop.
 """
 import pygame
 from typing import Optional, List, Tuple
-from ..items import ConsumableItem, ItemRegistry, registry
-from ..settings import Settings
+from items import ConsumableItem, ItemRegistry, registry
+from settings import Settings
 
 class ShopMenu:
     """A menu for buying food and drinks."""

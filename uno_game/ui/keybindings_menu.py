@@ -3,7 +3,7 @@ UI for changing game keybindings.
 """
 import pygame
 from typing import Dict, Optional, Tuple
-from ..settings import Settings, KEY_NAMES
+from settings import Settings, KEY_NAMES
 
 class KeybindingsMenu:
     """Menu for viewing and changing game keybindings."""
