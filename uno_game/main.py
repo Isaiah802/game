@@ -22,8 +22,13 @@ from audio.audio import AudioManager
 from ui.start_menu import StartMenu
 from ui.change_song_menu import ChangeSongMenu
 from ui.audio_settings import AudioSettingsMenu
+from ui.keybindings_menu import KeybindingsMenu
+from ui.shop_menu import run_shop
+from ui.consumables_menu import ConsumablesMenu
 from cards.card import create_dice_rolls
 from game.game_engine import GameManager
+from settings import Settings
+from items import registry
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -304,6 +309,8 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
 
     Controls:
     - Space: Play next round
+    - I: Open consumables menu (food & drinks)
+    - S: Open shop menu
     - Esc: Return to menu
     """
     clock = pygame.time.Clock()
@@ -316,6 +323,12 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         return
     player_names, starting_chips = setup
     gm = GameManager(player_names, starting_chips, screen=screen)
+    
+    # Initialize settings for keybindings
+    settings = Settings()
+    
+    # Track current player index for menu actions
+    current_player_idx = 0
 
     # UI state
     running = True
@@ -345,6 +358,67 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                             is_fullscreen = False
                     except Exception:
                         pass
+                elif event.key == pygame.K_i:
+                    # Open consumables menu for current player
+                    current_player = gm.player_order[current_player_idx]
+                    player_data = gm.players[current_player]
+                    
+                    # Initialize inventory if not present
+                    if 'inventory' not in player_data:
+                        from items import Inventory
+                        player_data['inventory'] = Inventory()
+                    
+                    inventory = player_data['inventory']
+                    consumables_menu = ConsumablesMenu(screen, inventory)
+                    
+                    # Get items in inventory
+                    items = [item for item in registry.get_all_items() 
+                            if inventory.get_item_quantity(item.name) > 0]
+                    
+                    # Run consumables menu loop
+                    menu_running = True
+                    while menu_running:
+                        for menu_event in pygame.event.get():
+                            if menu_event.type == pygame.QUIT:
+                                menu_running = False
+                            selected_item = consumables_menu.handle_event(menu_event, items)
+                            if selected_item:
+                                # Use the item
+                                gm.use_item(current_player, selected_item.name)
+                                round_message = f"{current_player} used {selected_item.name}!"
+                                round_message_end = time.time() + 2.0
+                                menu_running = False
+                            elif menu_event.type == pygame.KEYDOWN and menu_event.key == pygame.K_ESCAPE:
+                                menu_running = False
+                        
+                        # Draw game state in background
+                        screen.fill((40, 40, 60))
+                        consumables_menu.draw(items)
+                        pygame.display.flip()
+                        clock.tick(60)
+                        
+                elif event.key == pygame.K_s:
+                    # Open shop menu for current player
+                    current_player = gm.player_order[current_player_idx]
+                    player_chips = gm.players[current_player]['chips']
+                    
+                    # Run shop
+                    purchased_item, remaining_chips = run_shop(screen, player_chips, settings)
+                    
+                    if purchased_item:
+                        # Update player chips
+                        gm.players[current_player]['chips'] = remaining_chips
+                        # Add item to inventory
+                        gm.add_item_to_player(current_player, purchased_item.name, 1)
+                        round_message = f"{current_player} bought {purchased_item.name}!"
+                        round_message_end = time.time() + 2.0
+                        
+                elif event.key == pygame.K_TAB:
+                    # Switch to next player for menu actions
+                    current_player_idx = (current_player_idx + 1) % len(gm.player_order)
+                    round_message = f"Switched to {gm.player_order[current_player_idx]}"
+                    round_message_end = time.time() + 1.5
+                    
                 elif event.key == pygame.K_SPACE:
                     # start dice roll animation; actual round runs after animation
                     if not animating:
@@ -363,7 +437,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
 
         # Draw the game state
         screen.fill((40, 40, 60))
-        header = font.render('Press Space to play next round, Esc to return to menu', True, (255, 255, 255))
+        header = font.render('Space: next round | I: consumables | S: shop | Tab: switch player | Esc: menu', True, (255, 255, 255))
         screen.blit(header, (20, 20))
 
         # show transient round message (winner) if present
@@ -407,6 +481,11 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                     pass
   
             y += 50
+
+        # Display current player for menu actions
+        current_player_name = gm.player_order[current_player_idx]
+        current_player_txt = font.render(f"Current player (for menus): {current_player_name}", True, (200, 255, 200))
+        screen.blit(current_player_txt, (20, screen.get_height() - 40))
 
         # If animating, draw rolling dice animation in the center area
         if animating:
@@ -461,6 +540,9 @@ def main():
     music_vol = settings.get('music_volume', 0.6)
     audio.play_music(music_file, loop=True, volume=music_vol)
 
+    # Initialize settings
+    settings = Settings()
+    
     while True:
         choice = menu.run()
         if choice == 'play':
@@ -489,6 +571,23 @@ def main():
                     audio.set_music_volume(s.get('music_volume', 0.6))
                 except Exception:
                     pass
+            continue
+        elif choice == 'keybindings':
+            keybindings_menu = KeybindingsMenu(screen, settings)
+            clock = pygame.time.Clock()
+            running = True
+            while running:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        running = False
+                        break
+                    if keybindings_menu.handle_event(event):
+                        running = False
+                        break
+                screen.fill((20, 120, 20))
+                keybindings_menu.draw()
+                pygame.display.flip()
+                clock.tick(60)
             continue
         elif choice == 'quit':
             break
