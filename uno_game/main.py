@@ -25,6 +25,7 @@ from ui.audio_settings import AudioSettingsMenu
 from ui.keybindings_menu import KeybindingsMenu
 from ui.shop_menu import ShopMenu
 from ui.consumables_menu import ConsumablesMenu
+from ui.status_display import StatusDisplay
 from cards.card import create_dice_rolls
 from game.game_engine import GameManager
 from settings import Settings
@@ -343,6 +344,10 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     # Menu states
     show_inventory = False
     show_shop = False
+    
+    # Initialize status display
+    status_display = StatusDisplay()
+    
     while running:
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
@@ -393,7 +398,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
             player_data = gm.players[current_player]
             
             # Initialize inventory if not present
-            if 'inventory' not in player_data:
+            if 'inventory' not in player_data or player_data['inventory'] is None:
                 from items import Inventory
                 player_data['inventory'] = Inventory()
             
@@ -472,9 +477,10 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
             player_chips = player_data.get('chips', 0)
             
             # Initialize inventory if not present
-            if 'inventory' not in player_data:
+            if 'inventory' not in player_data or player_data['inventory'] is None:
                 from items import Inventory
                 player_data['inventory'] = Inventory()
+                print(f"[DEBUG] Initialized inventory for {current_player}")
             
             shop_menu = ShopMenu(screen, player_chips, game_settings)
             available_items = list(registry.items.values())
@@ -559,6 +565,12 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                 screen.blit(txt, (stack_rect.right + 8, y))
             except Exception:
                 pass
+
+            # Draw active effects for this player
+            active_effects = gm.get_active_effects(name)
+            if active_effects:
+                effects_x = stack_rect.right + 150
+                status_display.draw_player_effects(screen, name, active_effects, effects_x, y - 10, compact=True)
 
             # Render final roll if available
             result = gm.round_results.get(name)

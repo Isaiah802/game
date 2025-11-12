@@ -4,6 +4,7 @@ from audio.audio import AudioManager
 from ui.winner_page import *
 import pygame
 from .food_drink_methods import FoodDrinkMixin
+from items.consumables import registry, Effect
 
 audio = AudioManager(audio_folder=r"uno_game\assets")
 
@@ -24,9 +25,14 @@ class GameManager(FoodDrinkMixin):
         if len(player_names) < 2:
             raise ValueError("Zanzibar requires at least 2 players.")
 
-        self.players = {name: {'chips': starting_chips} for name in player_names}
+        self.players = {name: {
+            'chips': starting_chips,
+            'active_effects': {},  # {Effect: turns_remaining}
+            'inventory': None  # Will be set from main.py
+        } for name in player_names}
         self.player_order = player_names
         self.round_results = {}
+        self.current_round = 0
         print(f"Zanzibar game started with players: {', '.join(player_names)}")
         self.print_scores()
 
@@ -71,8 +77,20 @@ class GameManager(FoodDrinkMixin):
         pts = sum(pip_value(d) for d in roll)
         return {'score': (1, pts), 'payout': 1, 'name': f"Points total ({pts})"}
 
-    def _simulate_player_turn(self, max_rolls: int) -> dict:
-        """Simulates a single player's turn, trying to get the best score."""
+    def _simulate_player_turn(self, max_rolls: int, player_name: str = None) -> dict:
+        """Simulates a single player's turn, trying to get the best score.
+        
+        Args:
+            max_rolls: Maximum number of rolls allowed
+            player_name: Name of the player (used for applying effects)
+        """
+        # Apply LUCK_BOOST: small chance to get a perfect roll
+        if player_name and self.has_effect(player_name, Effect.LUCK_BOOST):
+            if random.random() < 0.15:  # 15% chance with luck boost
+                print(f"✨ {player_name}'s LUCK shines! Getting a great roll...")
+                current_roll = [4, 5, 6]  # Zanzibar!
+                return {'final_roll': current_roll, 'rolls_taken': 1}
+        
         # initial roll
         current_roll = [random.randint(1, 6) for _ in range(3)]
 
@@ -119,7 +137,7 @@ class GameManager(FoodDrinkMixin):
         # First player's turn sets the roll limit for others
         first_player = self.player_order[0]
         print(f"\n{first_player}'s turn (first player):")
-        turn_result = self._simulate_player_turn(max_rolls=3)
+        turn_result = self._simulate_player_turn(max_rolls=3, player_name=first_player)
         self.round_results[first_player] = turn_result
         roll_limit = turn_result['rolls_taken']
         print(f"{first_player} finished in {roll_limit} roll(s) with {turn_result['final_roll']}")
@@ -128,12 +146,17 @@ class GameManager(FoodDrinkMixin):
         for i in range(1, len(self.player_order)):
             player = self.player_order[i]
             print(f"\n{player}'s turn (must finish in {roll_limit} roll(s) or fewer):")
-            turn_result = self._simulate_player_turn(max_rolls=roll_limit)
+            turn_result = self._simulate_player_turn(max_rolls=roll_limit, player_name=player)
             self.round_results[player] = turn_result
             print(f"{player} finished in {turn_result['rolls_taken']} roll(s) with {turn_result['final_roll']}")
 
         self._resolve_round()
-        self.check_for_winner()
+        
+        # Update effects for all players after the round
+        for player in self.player_order:
+            self.update_effects(player)
+        
+        self.current_round += 1
         winner = self.check_for_winner()
         if winner:
             self.winner_found(winner)
@@ -188,6 +211,100 @@ class GameManager(FoodDrinkMixin):
                 print(f"\n🎉 {player} has lost all their chips and is the winner! 🎉")
                 return player
         return None
+
+    def use_item(self, player_name: str, item_name: str) -> bool:
+        """Use a consumable item and apply its effects to the player.
+        
+        Args:
+            player_name: Name of the player using the item
+            item_name: Name of the item to use
+            
+        Returns:
+            True if item was successfully used, False otherwise
+        """
+        if player_name not in self.players:
+            return False
+            
+        player_data = self.players[player_name]
+        inventory = player_data.get('inventory')
+        
+        if not inventory or inventory.get_item_quantity(item_name) <= 0:
+            print(f"[USE_ITEM] {player_name} doesn't have {item_name}")
+            return False
+            
+        # Get the item from registry
+        item = registry.get_item(item_name)
+        if not item:
+            return False
+            
+        # Remove from inventory
+        if not inventory.remove_item(item):
+            return False
+        
+        # Apply effects
+        if 'active_effects' not in player_data:
+            player_data['active_effects'] = {}
+            
+        for effect in item.effects:
+            player_data['active_effects'][effect] = item.duration
+            print(f"[EFFECT] {player_name} gained {effect.value} for {item.duration} turns!")
+            
+        return True
+    
+    def update_effects(self, player_name: str):
+        """Decrease duration of active effects and remove expired ones.
+        Called at the end of each player's turn.
+        
+        Args:
+            player_name: Name of the player whose effects to update
+        """
+        if player_name not in self.players:
+            return
+            
+        player_data = self.players[player_name]
+        if 'active_effects' not in player_data:
+            player_data['active_effects'] = {}
+            return
+            
+        active_effects = player_data['active_effects']
+        expired = []
+        
+        for effect, turns_left in active_effects.items():
+            active_effects[effect] = turns_left - 1
+            if active_effects[effect] <= 0:
+                expired.append(effect)
+                print(f"[EFFECT] {player_name}'s {effect.value} has worn off")
+        
+        for effect in expired:
+            del active_effects[effect]
+    
+    def get_active_effects(self, player_name: str) -> dict:
+        """Get all active effects for a player.
+        
+        Args:
+            player_name: Name of the player
+            
+        Returns:
+            Dictionary of {Effect: turns_remaining}
+        """
+        if player_name not in self.players:
+            return {}
+            
+        player_data = self.players[player_name]
+        return player_data.get('active_effects', {})
+    
+    def has_effect(self, player_name: str, effect: Effect) -> bool:
+        """Check if a player has a specific effect active.
+        
+        Args:
+            player_name: Name of the player
+            effect: The effect to check for
+            
+        Returns:
+            True if player has the effect active
+        """
+        active_effects = self.get_active_effects(player_name)
+        return effect in active_effects and active_effects[effect] > 0
 
     def winner_found(self, player):
         print(f"Congratulations {player}")
