@@ -136,10 +136,8 @@ class ShopMenu:
                         self.scroll_offset = current_index - self.max_items_shown + 1
             
             elif event.key == pygame.K_RETURN and self.selected_item:
-                if self.player_chips >= self.selected_item.cost:
-                    return self.selected_item
-                else:
-                    self.show_message("Not enough chips!", True)
+                # Always allow purchase since buying adds chips (penalty)
+                return self.selected_item
         
         return None
 
@@ -163,7 +161,11 @@ def run_shop(screen: pygame.Surface, player_chips: int, settings: Settings) -> T
             if item is None and event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 return None, player_chips
             elif item:
-                remaining_chips = player_chips - item.cost
+                print(f"[SHOP DEBUG] Buying {item.name}")
+                print(f"[SHOP DEBUG] Before purchase: {player_chips} chips")
+                print(f"[SHOP DEBUG] Item cost: {item.cost} chips")
+                remaining_chips = player_chips + item.cost
+                print(f"[SHOP DEBUG] After purchase: {remaining_chips} chips (added {item.cost})")
                 shop.player_chips = remaining_chips
                 shop.show_message(f"Bought {item.name}!")
                 player_chips = remaining_chips

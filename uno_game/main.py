@@ -491,19 +491,18 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                         if event.key == pygame.K_ESCAPE:
                             shop_running = False
                         elif event.key == pygame.K_RETURN and shop_menu.selected_item:
-                            # Try to buy the item
+                            # Try to buy the item (adds chips since goal is to reach 0)
                             item = shop_menu.selected_item
-                            if player_data['chips'] >= item.cost:
-                                player_data['chips'] -= item.cost
-                                player_data['inventory'].add_item(item)
-                                shop_menu.player_chips = player_data['chips']
-                                shop_menu.message = f"Bought {item.name}!"
-                                shop_menu.message_color = shop_menu.success_color
-                                shop_menu.message_timer = pygame.time.get_ticks() + 2000
-                            else:
-                                shop_menu.message = "Not enough chips!"
-                                shop_menu.message_color = shop_menu.error_color
-                                shop_menu.message_timer = pygame.time.get_ticks() + 2000
+                            print(f"[SHOP DEBUG] Buying {item.name}")
+                            print(f"[SHOP DEBUG] Before purchase: {player_data['chips']} chips")
+                            print(f"[SHOP DEBUG] Item cost: {item.cost} chips")
+                            player_data['chips'] += item.cost  # ADD chips (penalty for buying)
+                            print(f"[SHOP DEBUG] After purchase: {player_data['chips']} chips")
+                            player_data['inventory'].add_item(item)
+                            shop_menu.player_chips = player_data['chips']
+                            shop_menu.message = f"Bought {item.name}!"
+                            shop_menu.message_color = shop_menu.success_color
+                            shop_menu.message_timer = pygame.time.get_ticks() + 2000
                         elif event.key == pygame.K_UP:
                             if available_items and shop_menu.selected_item:
                                 idx = available_items.index(shop_menu.selected_item)
