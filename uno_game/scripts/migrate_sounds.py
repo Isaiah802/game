@@ -52,6 +52,11 @@ def classify_file(name: str) -> str:
 
 
 def ensure_dir(p: Path):
+    """Ensure a directory exists, creating it if necessary.
+    
+    Args:
+        p: Path to the directory.
+    """
     if not p.exists():
         p.mkdir(parents=True, exist_ok=True)
 
@@ -110,6 +115,11 @@ def migrate(source: Path, assets_base: Path, dry_run: bool = True) -> Tuple[List
 
 
 def main(argv: List[str] | None = None):
+    """Main entry point for the sound migration script.
+    
+    Args:
+        argv: Command-line arguments (defaults to sys.argv).
+    """
     p = argparse.ArgumentParser(description='Migrate legacy sounds into songs/ and sfx/')
     p.add_argument('--source', '-s', help='legacy source folder (defaults to assets/sounds)')
     p.add_argument('--assets', '-a', help='assets base folder (defaults to assets)')

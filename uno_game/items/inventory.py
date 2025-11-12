@@ -8,6 +8,7 @@ class Inventory:
     """Manages a player's inventory of food and drink items."""
     
     def __init__(self):
+        """Initialize an empty inventory with no items or active effects."""
         self.items: Dict[str, int] = {}  # Item name -> quantity
         self.active_effects: Dict[Effect, int] = {}  # Effect -> turns remaining
     

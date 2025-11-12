@@ -1,3 +1,6 @@
+"""
+Module for audio management including music and sound effects.
+"""
 # audio/audio.py
 import os
 import pygame
@@ -6,6 +9,8 @@ import threading
 
 # ---------------- Audio Manager ----------------
 class AudioManager:
+    """Manages background music and sound effects for the game."""
+    
     def __init__(self, audio_folder=None):
         """Initialize the AudioManager.
 
@@ -152,6 +157,7 @@ class AudioManager:
 
             # Background thread to resume music when sound finishes
             def _wait_and_resume(channel):
+                """Wait for sound effect to finish, then resume music."""
                 try:
                     while channel.get_busy():
                         pygame.time.wait(50)
@@ -188,11 +194,21 @@ class AudioManager:
         return self.play_music(filename, loop=loop, volume=pygame.mixer.music.get_volume())
 
     def set_music_volume(self, volume: float):
+        """Set the background music volume.
+        
+        Args:
+            volume: Volume level (0.0 to 1.0).
+        """
         if not self.available:
             return
         pygame.mixer.music.set_volume(volume)
 
     def get_music_volume(self) -> float:
+        """Get the current background music volume.
+        
+        Returns:
+            Current volume level (0.0 to 1.0).
+        """
         if not self.available:
             return 0.0
         return pygame.mixer.music.get_volume()
@@ -206,5 +222,10 @@ class AudioManager:
             pass
 
     def get_sfx_volume(self) -> float:
+        """Get the current sound effects volume multiplier.
+        
+        Returns:
+            Current SFX volume level (0.0 to 1.0).
+        """
         return getattr(self, 'sfx_volume', 1.0)
 

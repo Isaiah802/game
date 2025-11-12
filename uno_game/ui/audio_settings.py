@@ -1,3 +1,6 @@
+"""
+UI module for audio settings menu.
+"""
 import pygame
 from typing import Optional
 
@@ -11,6 +14,14 @@ class AudioSettingsMenu:
     """
 
     def __init__(self, screen: pygame.Surface, audio_manager, width=800, height=600):
+        """Initialize the audio settings menu.
+        
+        Args:
+            screen: Pygame surface to draw the menu on.
+            audio_manager: AudioManager instance for controlling audio.
+            width: Menu width in pixels.
+            height: Menu height in pixels.
+        """
         self.screen = screen
         self.am = audio_manager
         self.width = width
@@ -29,6 +40,7 @@ class AudioSettingsMenu:
             self.sfx_vol = 1.0
 
     def draw(self):
+        """Draw the audio settings menu UI."""
         self.screen.fill((40, 30, 30))
         title = self.title_font.render('Audio Settings', True, (255, 255, 255))
         tr = title.get_rect(center=(self.width // 2, 60))
@@ -46,6 +58,11 @@ class AudioSettingsMenu:
         pygame.display.flip()
 
     def run(self) -> Optional[dict]:
+        """Run the audio settings menu loop.
+        
+        Returns:
+            Dictionary with 'music_volume' and 'sfx_volume' keys if saved, None if cancelled.
+        """
         running = True
         result = None
         while running:

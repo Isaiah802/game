@@ -1,3 +1,6 @@
+"""
+UI module for selecting music/songs.
+"""
 import os
 import pygame
 from typing import List, Optional
@@ -12,6 +15,15 @@ class ChangeSongMenu:
     """
 
     def __init__(self, screen: pygame.Surface, audio_folder: str, width=800, height=600, audio_manager=None):
+        """Initialize the change song menu.
+        
+        Args:
+            screen: Pygame surface to draw the menu on.
+            audio_folder: Path to folder containing music files.
+            width: Menu width in pixels.
+            height: Menu height in pixels.
+            audio_manager: Optional AudioManager for live preview.
+        """
         self.screen = screen
         # If an AudioManager was provided, prefer its songs_folder
         self.audio = audio_manager
@@ -33,6 +45,7 @@ class ChangeSongMenu:
         self._load_files()
 
     def _load_files(self):
+        """Load music files from the audio folder."""
         if not os.path.exists(self.audio_folder):
             self.files = []
             return
@@ -42,6 +55,7 @@ class ChangeSongMenu:
             self.selected = 0
 
     def draw(self):
+        """Draw the song selection menu."""
         self.screen.fill((25, 25, 50))
         title = self.title_font.render('Select Music', True, (255, 255, 255))
         tr = title.get_rect(center=(self.width // 2, 60))
@@ -65,6 +79,11 @@ class ChangeSongMenu:
         pygame.display.flip()
 
     def run(self) -> Optional[str]:
+        """Run the song selection menu loop.
+        
+        Returns:
+            Selected filename or None if cancelled.
+        """
         running = True
         result: Optional[str] = None
         while running:

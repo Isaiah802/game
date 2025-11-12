@@ -10,6 +10,13 @@ class ShopMenu:
     """A menu for buying food and drinks."""
     
     def __init__(self, screen: pygame.Surface, player_chips: int, settings: Settings):
+        """Initialize the shop menu.
+        
+        Args:
+            screen: Pygame surface to draw the menu on.
+            player_chips: Number of chips the player currently has.
+            settings: Game settings object.
+        """
         self.screen = screen
         self.player_chips = player_chips
         self.settings = settings

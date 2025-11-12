@@ -6,10 +6,12 @@ from dataclasses import dataclass
 from typing import Optional, List, Dict
 
 class ItemType(Enum):
+    """Enumeration of consumable item types."""
     FOOD = "food"
     DRINK = "drink"
 
 class Effect(Enum):
+    """Enumeration of effects that consumable items can provide."""
     ENERGY_BOOST = "energy_boost"      # Gives extra energy
     LUCK_BOOST = "luck_boost"          # Temporary luck boost
     FOCUS_BOOST = "focus_boost"        # Better card visibility/memory
@@ -31,6 +33,7 @@ class ItemRegistry:
     """Registry of all available food and drink items in the game."""
     
     def __init__(self):
+        """Initialize the item registry with default items."""
         self.items: Dict[str, ConsumableItem] = {}
         self._initialize_items()
     

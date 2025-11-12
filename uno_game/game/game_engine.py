@@ -1,3 +1,6 @@
+"""
+Module for the core game engine that manages Zanzibar dice game logic.
+"""
 import random
 from collections import Counter
 from audio.audio import AudioManager
@@ -62,6 +65,7 @@ class GameManager(FoodDrinkMixin):
         # Points total - lowest rank. Per common Zanzibar rules, 1s count as 100, 6s as 60,
         # other faces count as their pip value.
         def pip_value(d):
+            """Calculate the point value of a single die face."""
             if d == 1:
                 return 100
             if d == 6:
@@ -190,6 +194,11 @@ class GameManager(FoodDrinkMixin):
         return None
 
     def winner_found(self, player):
+        """Display the winner screen and exit the game.
+        
+        Args:
+            player: Name of the winning player.
+        """
         print(f"Congratulations {player}")
         winner_screen = WinnerScreen(
             winner_name=player,

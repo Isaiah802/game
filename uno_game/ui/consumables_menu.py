@@ -10,6 +10,12 @@ class ConsumablesMenu:
     """A menu for displaying and using food and drink items."""
     
     def __init__(self, screen: pygame.Surface, inventory: Inventory):
+        """Initialize the consumables menu.
+        
+        Args:
+            screen: Pygame surface to draw the menu on.
+            inventory: Player's inventory containing consumable items.
+        """
         self.screen = screen
         self.inventory = inventory
         self.font = pygame.font.SysFont('Arial', 20)

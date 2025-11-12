@@ -1,9 +1,24 @@
+"""
+UI module for the main start menu.
+"""
 import pygame
 from typing import Callable, Optional
 
 
 class Button:
+    """A clickable button UI element."""
+    
     def __init__(self, rect: pygame.Rect, text: str, callback: Callable[[], None], font: pygame.font.Font, bg=(200, 200, 200), fg=(0, 0, 0)):
+        """Initialize a button.
+        
+        Args:
+            rect: Rectangle defining button position and size.
+            text: Text to display on the button.
+            callback: Function to call when button is clicked.
+            font: Font to use for button text.
+            bg: Background color (default gray).
+            fg: Foreground (text) color (default black).
+        """
         self.rect = rect
         self.text = text
         self.callback = callback
@@ -12,6 +27,7 @@ class Button:
         self.fg = fg
 
     def draw(self, surface: pygame.Surface):
+        """Draw the button on the given surface."""
         bg = self.bg
         if getattr(self, 'hovered', False):
             # slightly darker when hovered
@@ -23,6 +39,7 @@ class Button:
         surface.blit(txt, txt_r)
 
     def handle_event(self, event: pygame.event.Event):
+        """Handle mouse events for button interaction."""
         if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if self.rect.collidepoint(event.pos):
                 self.callback()
@@ -39,6 +56,13 @@ class StartMenu:
     """
 
     def __init__(self, screen: pygame.Surface, width=800, height=600):
+        """Initialize the start menu.
+        
+        Args:
+            screen: Pygame surface to draw the menu on.
+            width: Menu width in pixels.
+            height: Menu height in pixels.
+        """
         self.screen = screen
         self.width = width
         self.height = height
@@ -52,15 +76,18 @@ class StartMenu:
         self.build_ui()
 
     def build_ui(self):
+        """Build the UI elements (buttons) for the menu."""
         btn_w, btn_h = 240, 60
         start_x = (self.width - btn_w) // 2
         start_y = 220
         gap = 20
 
         def make_btn(i, text, key):
+            """Create a button at the given index with text and result key."""
             r = pygame.Rect(start_x, start_y + i * (btn_h + gap), btn_w, btn_h)
 
             def cb():
+                """Button click callback."""
                 self.result = key
 
             return Button(rect=r, text=text, callback=cb, font=self.font, bg=(240, 240, 240))
@@ -79,6 +106,7 @@ class StartMenu:
             b.hovered = (i == self.selected)
 
     def draw(self):
+        """Draw the menu and all its elements."""
         self.screen.fill((20, 120, 20))
         title = self.title_font.render("Game - Start Menu", True, (255, 255, 255))
         tr = title.get_rect(center=(self.width // 2, 120))
@@ -90,6 +118,7 @@ class StartMenu:
         pygame.display.flip()
 
     def handle_events(self):
+        """Handle keyboard and mouse events for menu interaction."""
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 self.result = 'quit'

@@ -9,6 +9,12 @@ class KeybindingsMenu:
     """Menu for viewing and changing game keybindings."""
     
     def __init__(self, screen: pygame.Surface, settings: Settings):
+        """Initialize the keybindings menu.
+        
+        Args:
+            screen: Pygame surface to draw the menu on.
+            settings: Game settings object containing keybindings.
+        """
         self.screen = screen
         self.settings = settings
         self.font = pygame.font.SysFont('Arial', 24)

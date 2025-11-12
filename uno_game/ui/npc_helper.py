@@ -1,7 +1,19 @@
+"""
+UI module for NPC helper character.
+"""
 import pygame
 
 class NPCHelper:
+    """Helper NPC that displays game rules and tips to the player."""
+    
     def __init__(self, screen, font=None, image_path=None):
+        """Initialize the NPC helper.
+        
+        Args:
+            screen: Pygame surface to draw on.
+            font: Font to use for text (defaults to Arial 22).
+            image_path: Optional path to NPC character image.
+        """
         self.screen = screen
         self.font = font or pygame.font.SysFont('Arial', 22)
         self.image = None
@@ -24,6 +36,7 @@ class NPCHelper:
         self.visible = True
 
     def draw(self):
+        """Draw the NPC helper box with text and image."""
         if not self.visible:
             return
         # Draw box in bottom left
@@ -46,6 +59,14 @@ class NPCHelper:
             ty += 28
 
     def handle_event(self, event):
+        """Handle events for hiding the NPC helper.
+        
+        Args:
+            event: Pygame event to process.
+            
+        Returns:
+            True if the event dismissed the helper, False otherwise.
+        """
         if not self.visible:
             return False
         if event.type == pygame.KEYDOWN and event.key in (pygame.K_1, pygame.K_RETURN):

@@ -35,6 +35,8 @@ KEY_NAMES = {
 }
 
 class Settings:
+    """Manages game settings including keybindings and audio preferences."""
+    
     def __init__(self, settings_file: str = 'keybindings.json'):
         """Initialize settings with a settings file path.
         

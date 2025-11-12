@@ -1,3 +1,6 @@
+"""
+UI module for the winner/victory screen.
+"""
 import os
 import pygame
 import time
@@ -12,6 +15,13 @@ class WinnerScreen:
     """
 
     def __init__(self, winner_name: str = 'Player', message: str = 'You win!', duration: float = 3.0):
+        """Initialize the winner screen.
+        
+        Args:
+            winner_name: Name of the winning player.
+            message: Victory message to display.
+            duration: How long to display the screen in seconds.
+        """
         self.winner_name = winner_name
         self.message = message
         self.duration = duration
@@ -20,6 +30,12 @@ class WinnerScreen:
         self.subtitle_color = (220, 220, 220)
 
     def run(self, screen: pygame.Surface, audio_manager=None):
+        """Run the winner screen display.
+        
+        Args:
+            screen: Pygame surface to draw on.
+            audio_manager: Optional AudioManager for victory sound effects.
+        """
         clock = pygame.time.Clock()
         start = time.time()
         font_title = pygame.font.SysFont('Arial', 56, bold=True)

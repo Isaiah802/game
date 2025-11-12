@@ -1,3 +1,6 @@
+"""
+Module for drawing game chip stacks in the UI.
+"""
 import pygame
 from typing import Tuple
 
@@ -14,11 +17,28 @@ DEFAULT_COLORS = [
 
 
 def _choose_color(count: int) -> Tuple[int, int, int]:
+    """Choose a chip color based on the chip count magnitude.
+    
+    Args:
+        count: Number of chips.
+        
+    Returns:
+        RGB color tuple.
+    """
     # Choose a color based on magnitude so stacks look varied
     return DEFAULT_COLORS[(count // 5) % len(DEFAULT_COLORS)]
 
 
 def draw_chip(surface: pygame.Surface, cx: int, cy: int, radius: int, color: Tuple[int, int, int]):
+    """Draw a single chip token.
+    
+    Args:
+        surface: Pygame surface to draw on.
+        cx: Center X coordinate.
+        cy: Center Y coordinate.
+        radius: Chip radius in pixels.
+        color: RGB color tuple.
+    """
     pygame.draw.circle(surface, color, (int(cx), int(cy)), radius)
     pygame.draw.circle(surface, (0, 0, 0), (int(cx), int(cy)), radius, 2)
 

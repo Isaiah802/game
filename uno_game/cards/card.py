@@ -1,3 +1,6 @@
+"""
+Module for dice and card game utilities.
+"""
 import turtle
 import random
 import typing
@@ -36,6 +39,7 @@ def draw_die(pen: turtle.Turtle, x: int, y: int, die: typing.Dict):
 
     # --- Helper function to draw a single pip (dot) ---
     def draw_pip(pip_x, pip_y):
+        """Draw a single pip (dot) on the die face."""
         pen.goto(pip_x, pip_y - pip_radius)  # Go to bottom of circle
         pen.pendown()
         pen.color('black', 'black')

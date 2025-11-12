@@ -1,3 +1,6 @@
+"""
+Pygame launcher script for the game menu.
+"""
 import os
 import sys
 import subprocess
@@ -7,6 +10,7 @@ from ui.start_menu import StartMenu
 
 
 def run_menu():
+    """Run the main game menu launcher."""
     pygame.init()
     WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT))

@@ -1,3 +1,6 @@
+"""
+UI module for the game intro/splash screen.
+"""
 import os
 import threading
 import math
@@ -14,6 +17,14 @@ class IntroScreen:
     """
 
     def __init__(self, title: str = 'Game', subtitle: str = '', duration: float = 2.5, **kwargs):
+        """Initialize the intro screen.
+        
+        Args:
+            title: Main title text to display.
+            subtitle: Subtitle text to display below title.
+            duration: Duration to show the intro screen in seconds.
+            **kwargs: Additional customization options (colors, fonts, etc.).
+        """
         self.title = title
         self.subtitle = subtitle
         self.duration = duration
@@ -98,6 +109,11 @@ class IntroScreen:
         state = {'progress': 0.0, 'done': False, 'error': None}
 
         def progress_cb(p):
+            """Update the loading progress value.
+            
+            Args:
+                p: Progress value between 0.0 and 1.0.
+            """
             try:
                 state['progress'] = max(0.0, min(1.0, float(p)))
             except Exception:
@@ -106,6 +122,7 @@ class IntroScreen:
         # If a load_work callable is provided, run it in a background thread
         if load_work is not None:
             def worker():
+                """Background worker thread for loading assets."""
                 try:
                     load_work(progress_cb)
                 except Exception as e:
@@ -118,6 +135,7 @@ class IntroScreen:
         else:
             # no loader: treat duration as the loading time
             def fake_loader(cb):
+                """Simulate loading progress for demonstration purposes."""
                 steps = max(10, int(self.duration * 10))
                 for i in range(steps):
                     time.sleep(max(0.01, self.duration / steps))

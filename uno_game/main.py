@@ -37,6 +37,11 @@ SETTINGS_PATH = os.path.join(BASE_DIR, 'settings.json')
 
 
 def load_settings():
+    """Load game settings from the settings file.
+    
+    Returns:
+        dict: Settings dictionary with music_file, music_volume, and sfx_volume.
+    """
     defaults = {'music_file': 'test.mp3', 'music_volume': 0.6, 'sfx_volume': 1.0}
     try:
         if os.path.exists(SETTINGS_PATH):
@@ -49,6 +54,11 @@ def load_settings():
 
 
 def save_settings(data: dict):
+    """Save game settings to the settings file.
+    
+    Args:
+        data: Dictionary of settings to save.
+    """
     try:
         with open(SETTINGS_PATH, 'w', encoding='utf-8') as f:
             json.dump(data, f, indent=2)
@@ -57,6 +67,15 @@ def save_settings(data: dict):
 
 
 def draw_die(surface: pygame.Surface, x: int, y: int, size: int, value: int):
+    """Draw a single die face on the surface.
+    
+    Args:
+        surface: Pygame surface to draw on.
+        x: X coordinate of the top-left corner.
+        y: Y coordinate of the top-left corner.
+        size: Size of the die in pixels.
+        value: Die value (1-6).
+    """
     # Draw white rectangle with black border
     rect = pygame.Rect(x, y, size, size)
     pygame.draw.rect(surface, (255, 255, 255), rect)
@@ -64,6 +83,7 @@ def draw_die(surface: pygame.Surface, x: int, y: int, size: int, value: int):
 
     # pip positions
     def pip(cx, cy):
+        """Draw a single pip (dot) on the die face."""
         pygame.draw.circle(surface, (0, 0, 0), (int(cx), int(cy)), size // 10)
 
     col_1 = x + size * 0.25
@@ -87,6 +107,13 @@ def draw_die(surface: pygame.Surface, x: int, y: int, size: int, value: int):
 
 
 def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 10):
+    """Run an interactive dice rolling demo.
+    
+    Args:
+        screen: Pygame display surface.
+        audio: AudioManager instance for sound effects.
+        num_dice: Number of dice to display (default 10).
+    """
     clock = pygame.time.Clock()
     running = True
     rolls = create_dice_rolls(num_dice)
@@ -168,6 +195,7 @@ def player_setup(screen: pygame.Surface):
     blink_interval = 500
 
     def draw_button(rect, text):
+        """Draw a button with text at the given rect position."""
         col = (200, 200, 200)
         if rect.collidepoint(pygame.mouse.get_pos()):
             col = (170, 170, 170)
@@ -602,6 +630,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         clock.tick(60)
 
 def main():
+    """Main entry point for the game application."""
     pygame.init()
     pygame.font.init()
 
