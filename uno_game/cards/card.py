@@ -73,7 +73,7 @@ if __name__ == "__main__":
     # --- Main Script (turtle demo) ---
     screen = turtle.Screen()
     screen.setup(width=900, height=600)
-    screen.bgcolor("#1E5631")  # A nice dark green for a game table
+    screen.bgcolor("#1C522E")  # A nice dark green for a game table
     screen.title("Dice Game")
     screen.tracer(0)  # Turn off automatic screen updates for faster drawing
 
