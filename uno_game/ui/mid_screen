@@ -4,5 +4,3 @@ import math
 import pygame
 import time
 
-
-class IntroScreen:

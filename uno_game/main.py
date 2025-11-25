@@ -36,6 +36,31 @@ BASE_DIR = os.path.dirname(__file__)
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 SETTINGS_PATH = os.path.join(BASE_DIR, 'settings.json')
 
+# Attempt to import the achievement notifier. If running with a different
+# cwd or from the package root, ensure the package path is available.
+try:
+    from graphics.achivments import notifier
+except Exception:
+    # If import fails (e.g. running from inside the uno_game folder),
+    # add the package parent directory to sys.path and retry.
+    parent = os.path.abspath(os.path.join(BASE_DIR, '..'))
+    if parent not in sys.path:
+        sys.path.insert(0, parent)
+    try:
+        from graphics.achivments import notifier
+    except Exception:
+        # As a last resort, create a dummy notifier that no-ops so calls
+        # to notifier.show()/update()/draw() won't crash at runtime.
+        class _DummyNotifier:
+            def show(self, *a, **k):
+                return
+            def update(self, *a, **k):
+                return
+            def draw(self, *a, **k):
+                return
+
+        notifier = _DummyNotifier()
+
 
 def load_settings():
     defaults = {'music_file': 'test.mp3', 'music_volume': 0.6, 'sfx_volume': 1.0}
@@ -107,6 +132,17 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
                     # play sfx if available
                     try:
                         audio.play_sound_effect(sfx_name, volume=0.8)
+                    except Exception:
+                        pass
+                elif event.key == pygame.K_k:
+                    # Demo achievement popup for testing (appears bottom-left)
+                    try:
+                        notifier.show(
+                            "Demo Achievement",
+                            "This verifies popups appear bottom-left",
+                            image_path=os.path.join(ASSETS_DIR, 'ach_demo.png'),
+                            placement='bottom-left'
+                        )
                     except Exception:
                         pass
                 elif event.key == pygame.K_ESCAPE:
@@ -365,6 +401,17 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                         else:
                             screen = pygame.display.set_mode(orig_size)
                             is_fullscreen = False
+                    except Exception:
+                        pass
+                elif event.key == pygame.K_k:
+                    # Demo achievement popup for testing (appears bottom-left)
+                    try:
+                        notifier.show(
+                            "Demo Achievement",
+                            "This verifies popups appear bottom-left",
+                            image_path=os.path.join(ASSETS_DIR, 'ach_demo.png'),
+                            placement='bottom-left'
+                        )
                     except Exception:
                         pass
                 elif event.key == pygame.K_i:

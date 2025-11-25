@@ -62,13 +62,17 @@ class AchievementNotifier:
 	PADDING = 12
 	THUMB = 64
 	WIDTH = 360
-	HEIGHT = 80
+	HEIGHT = 96
+	SHADOW_OFFSET = 6
 
-	def __init__(self):
+	def __init__(self, default_placement: str = 'bottom-right'):
 		self.queue: List[AchievementPopup] = []
 		# Defer font creation until pygame.font is initialized
 		self.font_title = None
 		self.font_sub = None
+		self.font_header = None
+		# default placement: 'bottom-right' or 'bottom-left'
+		self.default_placement = default_placement
 
 	def ensure_fonts(self):
 		"""Create font objects if not already created. Safe to call before pygame.init()."""
@@ -99,11 +103,14 @@ class AchievementNotifier:
 		except Exception:
 			return None
 
-	def show(self, title: str, subtitle: str = "", image_path: Optional[str] = None, duration: float = 4.0):
+	def show(self, title: str, subtitle: str = "", image_path: Optional[str] = None, duration: float = 4.0,
+		 	 placement: Optional[str] = None):
 		# ensure fonts ready for rendering when popup is created
 		self.ensure_fonts()
 		img = self.load_image(image_path) if image_path else None
 		p = AchievementPopup(title, subtitle, img, duration)
+		# per-popup placement (overrides notifier default)
+		p.placement = placement or self.default_placement
 		self.queue.append(p)
 
 	def update(self):
@@ -113,32 +120,47 @@ class AchievementNotifier:
 	def draw(self, surface: pygame.Surface):
 		# Ensure fonts exist before drawing
 		self.ensure_fonts()
-		# Draw stacked from bottom-right upwards
+		# Draw stacked; each popup may specify placement
 		sw, sh = surface.get_size()
-		x = sw - self.WIDTH - self.PADDING
-		y = sh - self.PADDING
 
 		# draw last in queue at bottom
 		for popup in reversed(self.queue):
-			y -= self.HEIGHT
+			placement = getattr(popup, 'placement', self.default_placement)
 			alpha = popup.alpha()
+			# compute stack index and offset
+			idx = list(reversed(self.queue)).index(popup)
+			stack_offset = idx * (self.HEIGHT + 8)
+			if placement == 'bottom-left':
+				x = self.PADDING
+				y = sh - self.PADDING - self.HEIGHT - stack_offset
+			else:
+				# bottom-right (default)
+				x = sw - self.WIDTH - self.PADDING
+				y = sh - self.PADDING - self.HEIGHT - stack_offset
 
 			# background surface per-popup to allow fade
 			surf = pygame.Surface((self.WIDTH, self.HEIGHT), pygame.SRCALPHA)
 			# semi-opaque dark background
 			surf.fill((20, 20, 30, int(220 * (alpha / 255))))
+			# rounded rect background for nicer style (pygame 2+ supports border_radius)
+			try:
+				pygame.draw.rect(surf, (24, 24, 34, int(230 * (alpha / 255))), surf.get_rect(), border_radius=8)
+			except Exception:
+				pass
 
 			# draw thumb
-			img_x = 10
+			img_x = 12
+			img_y = (self.HEIGHT - self.THUMB) // 2
 			if popup.image:
 				img = popup.image.copy()
 				img.set_alpha(alpha)
-				surf.blit(img, (img_x, (self.HEIGHT - self.THUMB) // 2))
+				surf.blit(img, (img_x, img_y))
 			else:
-				# placeholder box
+				# placeholder box with a subtle border
 				box = pygame.Surface((self.THUMB, self.THUMB), pygame.SRCALPHA)
-				box.fill((80, 120, 200, alpha))
-				surf.blit(box, (img_x, (self.HEIGHT - self.THUMB) // 2))
+				box.fill((80, 120, 200, int(220 * (alpha / 255))))
+				pygame.draw.rect(box, (255, 255, 255, int(40 * (alpha / 255))), box.get_rect(), 2)
+				surf.blit(box, (img_x, img_y))
 
 			# draw text
 			tx = img_x + self.THUMB + 12
@@ -153,7 +175,18 @@ class AchievementNotifier:
 				surf.blit(sub_surf, (tx, ty + 28))
 
 			# border
-			pygame.draw.rect(surf, (120, 120, 140, int(120 * (alpha / 255))), surf.get_rect(), 1)
+			try:
+				pygame.draw.rect(surf, (100, 100, 120, int(140 * (alpha / 255))), surf.get_rect(), 1, border_radius=8)
+			except Exception:
+				pass
+
+			# shadow behind popup for depth (offset depends on placement)
+			shadow = pygame.Surface((self.WIDTH, self.HEIGHT), pygame.SRCALPHA)
+			shadow.fill((0, 0, 0, int(120 * (alpha / 255))))
+			if placement == 'bottom-left':
+				surface.blit(shadow, (x - self.SHADOW_OFFSET, y + self.SHADOW_OFFSET))
+			else:
+				surface.blit(shadow, (x + self.SHADOW_OFFSET, y + self.SHADOW_OFFSET))
 
 			# finally blit the composed popup onto the target surface
 			surface.blit(surf, (x, y))
