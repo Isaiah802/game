@@ -26,7 +26,7 @@ from ui.keybindings_menu import KeybindingsMenu
 from ui.shop_menu import ShopMenu
 from ui.consumables_menu import ConsumablesMenu
 from ui.status_display import StatusDisplay
-from cards.card import create_dice_rolls
+import subprocess
 from game.game_engine import GameManager
 from settings import Settings
 from items import registry
@@ -113,71 +113,12 @@ def draw_die(surface: pygame.Surface, x: int, y: int, size: int, value: int):
 
 
 def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 10):
-    clock = pygame.time.Clock()
-    running = True
-    rolls = create_dice_rolls(num_dice)
-    font = pygame.font.SysFont('Arial', 20)
-
-    # try to play a roll sfx when rolling
-    sfx_name = 'mouse-click-290204.mp3'  # included asset
-
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                sys.exit()
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_r:
-                    rolls = create_dice_rolls(num_dice)
-                    # play sfx if available
-                    try:
-                        audio.play_sound_effect(sfx_name, volume=0.8)
-                    except Exception:
-                        pass
-                elif event.key == pygame.K_k:
-                    # Demo achievement popup for testing (appears bottom-left)
-                    try:
-                        notifier.show(
-                            "Demo Achievement",
-                            "This verifies popups appear bottom-left",
-                            image_path=os.path.join(ASSETS_DIR, 'ach_demo.png'),
-                            placement='bottom-left'
-                        )
-                    except Exception:
-                        pass
-                elif event.key == pygame.K_ESCAPE:
-                    running = False
-
-        # draw background
-        screen.fill((30, 140, 40))
-
-        # layout dice in two rows of up to 5
-        die_size = 80
-        die_spacing = 100
-        total_width = 5 * die_size + 4 * (die_spacing - die_size)
-        start_x = (screen.get_width() - total_width) // 2
-        top_y = 100
-        bottom_y = 220
-
-        for i, d in enumerate(rolls):
-            if i < 5:
-                x = start_x + i * die_spacing
-                y = top_y
-            else:
-                x = start_x + (i - 5) * die_spacing
-                y = bottom_y
-            draw_die(screen, x, y, die_size, d.get('value', 0))
-
-        total = sum(d.get('value', 0) for d in rolls)
-        txt = font.render(f"Roll total: {total}    (R to roll, Esc to return)", True, (255, 255, 255))
-        screen.blit(txt, (20, 20))
-
-        vals = ', '.join(str(d.get('value', '?')) for d in rolls)
-        txt2 = font.render("Values: " + vals, True, (255, 255, 255))
-        screen.blit(txt2, (20, 50))
-
-        pygame.display.flip()
-        clock.tick(60)
+    # Launch the 3D dice roller as a separate process
+    dice_roller_path = os.path.join(os.path.dirname(__file__), 'cards', 'dice_rollerv3.py')
+    try:
+        subprocess.run([sys.executable, dice_roller_path], check=True)
+    except Exception as e:
+        print(f"Failed to launch 3D dice roller: {e}")
 
 
 def player_setup(screen: pygame.Surface):
@@ -693,8 +634,13 @@ def main():
     while True:
         choice = menu.run()
         if choice == 'play':
-            # Launch the full Zanzibar-style dice game engine (with pre-game setup)
-            run_game_engine(screen, audio)
+            # Launch the 3D dice roller instead of the old game engine
+            dice_roller_path = os.path.join(os.path.dirname(__file__), 'cards', 'dice_rollerv3.py')
+            # Set working directory to uno_game so relative imports work
+            try:
+                subprocess.run([sys.executable, dice_roller_path], check=True, cwd=os.path.dirname(__file__))
+            except Exception as e:
+                print(f"Failed to launch 3D dice roller: {e}")
             continue
         elif choice == 'change_song':
             changer = ChangeSongMenu(screen, audio_folder=os.path.join(ASSETS_DIR, 'songs'), audio_manager=audio)
@@ -731,7 +677,6 @@ def main():
                         sys.exit()
                     if keybindings_menu.handle_event(event):
                         kb_running = False
-                
                 # Clear screen with a solid background
                 screen.fill((15, 15, 20))
                 keybindings_menu.draw()

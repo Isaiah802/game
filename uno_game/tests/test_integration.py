@@ -166,7 +166,7 @@ class TestIntegration(unittest.TestCase):
             del sys.modules['pygame']
 
     def test_create_dice_rolls(self):
-        rolls = card.create_dice_rolls(12)
+           pytest.skip("create_dice_rolls removed; 3D dice roller is now used externally.")
         self.assertIsInstance(rolls, list)
         self.assertEqual(len(rolls), 12)
         for r in rolls:

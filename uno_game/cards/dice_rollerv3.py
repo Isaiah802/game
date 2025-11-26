@@ -1,5 +1,12 @@
 import os
 import sys
+import os
+# Ensure uno_game directory itself is in sys.path for imports
+uno_game_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if uno_game_dir not in sys.path:
+    sys.path.insert(0, uno_game_dir)
+from direct.gui.DirectGui import DirectButton, DirectFrame, DirectLabel, DirectScrolledList
+from items import registry, Inventory
 import random
 import math
 
@@ -10,7 +17,8 @@ from panda3d.core import (
     Texture, PNMImage, TransparencyAttrib,
     DirectionalLight, AmbientLight,
     Material, AntialiasAttrib, TextNode,
-    Filename, loadPrcFileData, LineSegs
+    Filename, loadPrcFileData, LineSegs,
+    globalClock
 )
 from panda3d.bullet import (
     BulletWorld, BulletPlaneShape, 
@@ -51,6 +59,57 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DIE_AXIS_MAPPING = { "UP": 4, "DOWN": 3, "RIGHT": 2, "LEFT": 1, "FWD": 5, "BACK": 6 }
 
 # --- LIBRARY CHECK ---
+class ShopInventoryUI:
+    def __init__(self, parent, player_inventory):
+        self.parent = parent
+        self.player_inventory = player_inventory
+        self.frame = DirectFrame(frameColor=(0.1,0.1,0.1,0.9), frameSize=(-0.7,0.7,-0.6,0.6), pos=(0,0,0.1))
+        self.title = DirectLabel(text="Shop & Inventory", scale=0.08, pos=(0,0,0.5), parent=self.frame)
+        self.shop_btn = DirectButton(text="Shop", scale=0.07, pos=(-0.4,0,0.4), command=self.show_shop, parent=self.frame)
+        self.inv_btn = DirectButton(text="Inventory", scale=0.07, pos=(0.4,0,0.4), command=self.show_inventory, parent=self.frame)
+        self.close_btn = DirectButton(text="Close", scale=0.06, pos=(0,0,-0.5), command=self.hide, parent=self.frame)
+        self.list_label = DirectLabel(text="", scale=0.06, pos=(0,0,0.25), parent=self.frame)
+        self.item_list = None
+        self.frame.hide()
+
+    def show(self):
+        self.frame.show()
+        self.show_shop()
+
+    def hide(self):
+        self.frame.hide()
+
+    def show_shop(self):
+        items = registry.get_all_items()
+        self.list_label['text'] = "Shop Items:"
+        self._update_list([f"{item.name} ({item.cost} chips)" for item in items], self.buy_item, items)
+
+    def show_inventory(self):
+        inv_items = self.player_inventory.get_all_items()
+        display = [f"{name} x{qty}" for name, qty in inv_items.items() if qty > 0]
+        self.list_label['text'] = "Inventory:"
+        self._update_list(display, self.use_item, [registry.get_item(name) for name in inv_items if inv_items[name] > 0])
+
+    def _update_list(self, item_names, action, items):
+        if self.item_list:
+            self.item_list.destroy()
+        self.item_list = DirectScrolledList(
+            decButton_pos=(0.6, 0, 0.15), incButton_pos=(0.6, 0, -0.15),
+            frameSize=(-0.6,0.6,-0.15,0.15), pos=(0,0,0), parent=self.frame,
+            itemFrame_frameSize=(-0.5,0.5,-0.12,0.12), itemFrame_pos=(0,0,0),
+            numItemsVisible=4,
+            items=[DirectButton(text=name, scale=0.06, command=lambda i=i: action(items[i]), parent=self.frame) for i, name in enumerate(item_names)]
+        )
+
+    def buy_item(self, item):
+        if item:
+            self.player_inventory.add_item(item)
+            self.show_inventory()
+
+    def use_item(self, item):
+        if item:
+            self.player_inventory.use_item(item)
+            self.show_inventory()
 try:
     import simplepbr
     import gltf
@@ -151,6 +210,17 @@ class DiceSimulator(ShowBase):
 
         self.spawn_dice()
         self.taskMgr.add(self.update, 'update')
+
+        # --- SHOP/INVENTORY UI ---
+        self.player_inventory = Inventory()
+        self.shop_inventory_ui = ShopInventoryUI(self.render, self.player_inventory)
+        self.accept('i', self.toggle_inventory)
+
+    def toggle_inventory(self):
+        if self.shop_inventory_ui.frame.isHidden():
+            self.shop_inventory_ui.show()
+        else:
+            self.shop_inventory_ui.hide()
 
     def spawn_dice(self):
         for i in range(2):
