@@ -18,11 +18,13 @@ import json
 import time
 import pygame
 import random
+from typing import Optional
 from audio.audio import AudioManager
-from ui.start_menu import StartMenu
+from ui.start_menu import StartMenu, _make_vignette
 from ui.change_song_menu import ChangeSongMenu
 from ui.audio_settings import AudioSettingsMenu
 from ui.keybindings_menu import KeybindingsMenu
+from ui.achievements_menu import AchievementsMenu
 from ui.shop_menu import ShopMenu
 from ui.consumables_menu import ConsumablesMenu
 from ui.status_display import StatusDisplay
@@ -141,7 +143,7 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
                             "Demo Achievement",
                             "This verifies popups appear bottom-left",
                             image_path=os.path.join(ASSETS_DIR, 'ach_demo.png'),
-                            placement='bottom-left'
+                            placement='bottom-right'
                         )
                     except Exception:
                         pass
@@ -190,6 +192,13 @@ def player_setup(screen: pygame.Surface):
     input_text = ''
     players = []
     starting_chips = 20  # fixed per requirement
+    # Styling & state
+    felt_color = (12, 80, 34)
+    vignette = _make_vignette(screen.get_width(), screen.get_height())
+    # spotlight removed for cleaner look
+    spotlight_center = [screen.get_width() // 2, 80]
+    selected_idx: Optional[int] = None
+    max_name_len = 16
 
     # Button rectangles
     btn_w, btn_h = 100, 36
@@ -205,12 +214,17 @@ def player_setup(screen: pygame.Surface):
     blink_interval = 500
 
     def draw_button(rect, text):
-        col = (200, 200, 200)
-        if rect.collidepoint(pygame.mouse.get_pos()):
-            col = (170, 170, 170)
-        pygame.draw.rect(screen, col, rect)
-        pygame.draw.rect(screen, (0, 0, 0), rect, 2)
-        txt = font.render(text, True, (0, 0, 0))
+        # pill-style button with gold rim and darker hover
+        rim = (212, 175, 55)
+        inner = (60, 60, 60)
+        hover_inner = (90, 90, 90)
+        mx, my = pygame.mouse.get_pos()
+        is_hover = rect.collidepoint((mx, my))
+        pygame.draw.rect(screen, rim, rect, border_radius=12)
+        inner_col = hover_inner if is_hover else inner
+        inner_rect = rect.inflate(-6, -6)
+        pygame.draw.rect(screen, inner_col, inner_rect, border_radius=10)
+        txt = font.render(text, True, (245, 245, 245))
         tr = txt.get_rect(center=rect.center)
         screen.blit(txt, tr)
 
@@ -237,34 +251,81 @@ def player_setup(screen: pygame.Surface):
                     return None
                 elif event.key == pygame.K_RETURN:
                     if input_text.strip():
-                        players.append(input_text.strip())
-                        input_text = ''
-                        error_msg = ''
+                        name = input_text.strip()[:max_name_len]
+                        if name in players:
+                            error_msg = 'Name already used'
+                        else:
+                            players.append(name)
+                            input_text = ''
+                            error_msg = ''
+                            selected_idx = len(players) - 1
                 elif event.key == pygame.K_BACKSPACE:
                     if input_text:
                         input_text = input_text[:-1]
                     elif players:
-                        players.pop()
+                        # remove selected if present, else pop last
+                        if selected_idx is not None and 0 <= selected_idx < len(players):
+                            players.pop(selected_idx)
+                            # adjust selection
+                            if not players:
+                                selected_idx = None
+                            else:
+                                selected_idx = max(0, min(selected_idx, len(players) - 1))
+                        else:
+                            players.pop()
                 elif event.key == pygame.K_UP:
-                    scroll_offset = max(0, scroll_offset - 1)
+                    # move selection up in list
+                    if players:
+                        if selected_idx is None:
+                            selected_idx = 0
+                        else:
+                            selected_idx = max(0, selected_idx - 1)
+                        if selected_idx < scroll_offset:
+                            scroll_offset = selected_idx
                 elif event.key == pygame.K_DOWN:
-                    max_off = max(0, len(players) - 8)
-                    scroll_offset = min(max_off, scroll_offset + 1)
+                    if players:
+                        if selected_idx is None:
+                            selected_idx = 0
+                        else:
+                            selected_idx = min(len(players) - 1, selected_idx + 1)
+                        max_off = max(0, len(players) - 8)
+                        if selected_idx >= scroll_offset + 8:
+                            scroll_offset = min(max_off, selected_idx - 7)
                 else:
                     ch = event.unicode
                     if ch and ch.isprintable():
-                        input_text += ch
+                        if len(input_text) < max_name_len:
+                            input_text += ch
 
-        # Handle button clicks
+        # Handle button clicks and list selection
+        players_start_y = 192
+        visible_count = 8
         if mouse_pressed:
-            if add_btn.collidepoint((mx, my)):
+            # check if clicked in players list area
+            if mx >= 20 and mx <= screen.get_width() - 20 and my >= players_start_y and my < players_start_y + visible_count * 24:
+                idx = scroll_offset + (my - players_start_y) // 24
+                if 0 <= idx < len(players):
+                    selected_idx = idx
+            elif add_btn.collidepoint((mx, my)):
                 if input_text.strip():
-                    players.append(input_text.strip())
-                    input_text = ''
-                    error_msg = ''
+                    name = input_text.strip()[:max_name_len]
+                    if name in players:
+                        error_msg = 'Name already used'
+                    else:
+                        players.append(name)
+                        input_text = ''
+                        error_msg = ''
+                        selected_idx = len(players) - 1
             elif remove_btn.collidepoint((mx, my)):
                 if players:
-                    players.pop()
+                    if selected_idx is not None and 0 <= selected_idx < len(players):
+                        players.pop(selected_idx)
+                        if not players:
+                            selected_idx = None
+                        else:
+                            selected_idx = max(0, min(selected_idx, len(players) - 1))
+                    else:
+                        players.pop()
             elif start_btn.collidepoint((mx, my)):
                 if len(players) < 2:
                     error_msg = 'Need at least 2 players'
@@ -273,8 +334,13 @@ def player_setup(screen: pygame.Surface):
             elif cancel_btn.collidepoint((mx, my)):
                 return None
 
-        # Draw UI
-        screen.fill((25, 100, 25))
+        # Draw UI (polished)
+        screen.fill(felt_color)
+        # vignette
+        try:
+            screen.blit(vignette, (0, 0))
+        except Exception:
+            pass
         y = 20
         title = font.render('Pre-game Setup', True, (255, 255, 255))
         screen.blit(title, (20, y))
@@ -288,11 +354,16 @@ def player_setup(screen: pygame.Surface):
         screen.blit(chips_txt, (20, y))
         y += 30
 
-        # Input box
-        input_box = pygame.Rect(20, y, 300, 36)
-        pygame.draw.rect(screen, (255, 255, 255), input_box, 2)
-        input_surf = font.render(input_text, True, (255, 255, 255))
-        screen.blit(input_surf, (input_box.x + 6, input_box.y + 6))
+        # Input box (styled)
+        input_box = pygame.Rect(20, y, 360, 40)
+        pygame.draw.rect(screen, (212, 175, 55), input_box, border_radius=8)
+        inner = input_box.inflate(-6, -6)
+        pygame.draw.rect(screen, (40, 40, 40), inner, border_radius=6)
+        if input_text:
+            input_surf = font.render(input_text, True, (245, 245, 245))
+        else:
+            input_surf = font.render('Type player name…', True, (160, 160, 160))
+        screen.blit(input_surf, (input_box.x + 8, input_box.y + 8))
         y += 50
 
         # Players list (scrollable)
@@ -304,9 +375,18 @@ def player_setup(screen: pygame.Surface):
         scroll_offset = max(0, min(scroll_offset, max_off))
         start_idx = scroll_offset
         end_idx = min(len(players), start_idx + visible_count)
-        for p in players[start_idx:end_idx]:
+        # draw selectable player rows
+        row_x = 40
+        row_w = screen.get_width() - 80
+        for i, p in enumerate(players[start_idx:end_idx], start=start_idx):
+            row_rect = pygame.Rect(row_x - 8, y - 2, row_w + 16, 24)
+            if selected_idx == i:
+                # highlight selected with translucent gold
+                highlight = pygame.Surface((row_rect.width, row_rect.height), pygame.SRCALPHA)
+                highlight.fill((212, 175, 55, 48))
+                screen.blit(highlight, (row_rect.x, row_rect.y))
             ptxt = font.render('- ' + p, True, (240, 240, 240))
-            screen.blit(ptxt, (40, y))
+            screen.blit(ptxt, (row_x, y))
             y += 24
 
         # small scrollbar indicator if needed
@@ -320,11 +400,11 @@ def player_setup(screen: pygame.Surface):
             pygame.draw.rect(screen, (120, 120, 120), (bar_x, thumb_y, 6, thumb_h))
 
         # caret
-        if caret_visible:
-            caret_x = input_box.x + 6 + input_surf.get_width()
-            caret_y1 = input_box.y + 6
-            caret_y2 = input_box.y + input_box.height - 6
-            pygame.draw.line(screen, (255, 255, 255), (caret_x, caret_y1), (caret_x, caret_y2), 2)
+        if caret_visible and input_text:
+            caret_x = input_box.x + 8 + input_surf.get_width()
+            caret_y1 = input_box.y + 8
+            caret_y2 = input_box.y + input_box.height - 8
+            pygame.draw.line(screen, (245, 245, 245), (caret_x, caret_y1), (caret_x, caret_y2), 2)
 
         # Draw buttons
         draw_button(add_btn, 'Add')
@@ -336,6 +416,8 @@ def player_setup(screen: pygame.Surface):
         if error_msg:
             em = font.render(error_msg, True, (255, 100, 100))
             screen.blit(em, (20, 300))
+
+        # spotlight removed — kept vignette only for subtle focus
 
         pygame.display.flip()
         clock.tick(60)
@@ -438,6 +520,12 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                                 pass
                     # play a round  
                     gm.play_round()
+
+        # If the game manager signalled the game ended (winner found), exit the
+        # engine loop so control returns to the Start Menu instead of quitting.
+        if getattr(gm, '_end_game', False):
+            running = False
+            continue
         
         # Handle inventory menu
         if show_inventory:
@@ -512,6 +600,12 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                     screen.blit(msg, msg_rect)
                 else:
                     inventory_menu.draw(items)
+                # draw any queued achievement popups (non-blocking)
+                try:
+                    notifier.update()
+                    notifier.draw(screen)
+                except Exception:
+                    pass
                 pygame.display.flip()
                 clock.tick(60)
             
@@ -556,6 +650,15 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                             shop_menu.message = f"Bought {item.name}!"
                             shop_menu.message_color = shop_menu.success_color
                             shop_menu.message_timer = pygame.time.get_ticks() + 2000
+                            # Track purchases for the 'collector' achievement
+                            try:
+                                pc = player_data.get('purchase_count', 0) + 1
+                                player_data['purchase_count'] = pc
+                                if pc >= 10:
+                                    from achievements import achievements as achievements_manager
+                                    achievements_manager.unlock('collector')
+                            except Exception:
+                                pass
                         elif event.key == pygame.K_UP:
                             if available_items and shop_menu.selected_item:
                                 idx = available_items.index(shop_menu.selected_item)
@@ -577,6 +680,12 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                 
                 screen.fill((20, 20, 30))
                 shop_menu.draw(available_items)
+                # draw any queued achievement popups (non-blocking)
+                try:
+                    notifier.update()
+                    notifier.draw(screen)
+                except Exception:
+                    pass
                 pygame.display.flip()
                 clock.tick(60)
             
@@ -656,6 +765,12 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                     round_message = f"Round winner: {winner} - {scores[winner]['name']}"
                     round_message_end = time.time() + 3.0
 
+        # draw any queued achievement popups (non-blocking)
+        try:
+            notifier.update()
+            notifier.draw(screen)
+        except Exception:
+            pass
         pygame.display.flip()
         clock.tick(60)
 
@@ -735,6 +850,24 @@ def main():
                 # Clear screen with a solid background
                 screen.fill((15, 15, 20))
                 keybindings_menu.draw()
+                pygame.display.flip()
+                clock.tick(60)
+            continue
+        elif choice == 'achievements':
+            ach_menu = AchievementsMenu(screen)
+            clock = pygame.time.Clock()
+            ach_running = True
+            while ach_running:
+                for event in pygame.event.get():
+                    if event.type == pygame.QUIT:
+                        pygame.quit()
+                        sys.exit()
+                    if ach_menu.handle_event(event):
+                        ach_running = False
+
+                # Clear screen with a solid background
+                screen.fill((15, 15, 20))
+                ach_menu.draw()
                 pygame.display.flip()
                 clock.tick(60)
             continue

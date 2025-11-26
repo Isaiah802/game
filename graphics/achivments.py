@@ -103,11 +103,16 @@ class AchievementNotifier:
 		except Exception:
 			return None
 
-	def show(self, title: str, subtitle: str = "", image_path: Optional[str] = None, duration: float = 4.0,
-		 	 placement: Optional[str] = None):
+	def show(self, title: str, subtitle: str = "", image_path: Optional[str] = None,
+			 image: Optional[pygame.Surface] = None, duration: float = 4.0,
+			 placement: Optional[str] = None):
 		# ensure fonts ready for rendering when popup is created
 		self.ensure_fonts()
-		img = self.load_image(image_path) if image_path else None
+		# Prefer a provided Surface image, otherwise try to load from path.
+		if image is not None:
+			img = image
+		else:
+			img = self.load_image(image_path) if image_path else None
 		p = AchievementPopup(title, subtitle, img, duration)
 		# per-popup placement (overrides notifier default)
 		p.placement = placement or self.default_placement

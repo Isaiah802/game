@@ -33,6 +33,10 @@ class GameManager(FoodDrinkMixin):
         self.player_order = player_names
         self.round_results = {}
         self.current_round = 0
+        # Track last round winner and streaks for achievements like "win two
+        # rounds in a row".
+        self._last_round_winner = None
+        self._streak_count = 0
         print(f"Zanzibar game started with players: {', '.join(player_names)}")
         self.print_scores()
 
@@ -139,6 +143,14 @@ class GameManager(FoodDrinkMixin):
         print(f"\n{first_player}'s turn (first player):")
         turn_result = self._simulate_player_turn(max_rolls=3, player_name=first_player)
         self.round_results[first_player] = turn_result
+        # Check for big roller achievement (total >= 20)
+        try:
+            total = sum(turn_result.get('final_roll', []))
+            if total >= 20:
+                from achievements import achievements as achievements_manager
+                achievements_manager.unlock('big_roller')
+        except Exception:
+            pass
         roll_limit = turn_result['rolls_taken']
         print(f"{first_player} finished in {roll_limit} roll(s) with {turn_result['final_roll']}")
 
@@ -148,6 +160,14 @@ class GameManager(FoodDrinkMixin):
             print(f"\n{player}'s turn (must finish in {roll_limit} roll(s) or fewer):")
             turn_result = self._simulate_player_turn(max_rolls=roll_limit, player_name=player)
             self.round_results[player] = turn_result
+            # Check for big roller achievement (total >= 20)
+            try:
+                total = sum(turn_result.get('final_roll', []))
+                if total >= 20:
+                    from achievements import achievements as achievements_manager
+                    achievements_manager.unlock('big_roller')
+            except Exception:
+                pass
             print(f"{player} finished in {turn_result['rolls_taken']} roll(s) with {turn_result['final_roll']}")
 
         self._resolve_round()
@@ -188,6 +208,20 @@ class GameManager(FoodDrinkMixin):
                 self.players[loser]['chips'] += payout_amount
 
         self.print_scores()
+
+        # Handle consecutive-round-win achievement (two wins in a row)
+        try:
+            if winner == self._last_round_winner:
+                self._streak_count += 1
+            else:
+                self._streak_count = 1
+                self._last_round_winner = winner
+
+            if self._streak_count >= 2:
+                from achievements import achievements as achievements_manager
+                achievements_manager.unlock('lucky_strike')
+        except Exception:
+            pass
 
         # Per rules: winner of the round rolls first next round. Rotate player_order
         try:
@@ -312,8 +346,44 @@ class GameManager(FoodDrinkMixin):
             winner_name=player,
             message="Master of Dice!"
         )
+        # Show the winner screen and then *return control* to the caller instead
+        # of quitting the entire process. The main loop will detect the
+        # `_end_game` flag and return to the start menu.
         winner_screen.run(self.screen, audio_manager=audio)
         pygame.time.delay(2000)
-        pygame.quit()
-        raise SystemExit
+        # Unlock the 'first_win' achievement for this session and show popup.
+        try:
+            from achievements import achievements as achievements_manager
+            achievements_manager.unlock('first_win')
+            # After unlocking, ensure the notifier has time to render the popup
+            # before we return to the Start Menu. Run a short local loop that
+            # updates/draws the notifier for a couple of seconds.
+            try:
+                # import notifier directly to avoid re-importing graphics module
+                from graphics.achivments import notifier
+                clk = pygame.time.Clock()
+                start_ms = pygame.time.get_ticks()
+                duration_ms = 1800
+                while pygame.time.get_ticks() - start_ms < duration_ms:
+                    for ev in pygame.event.get():
+                        if ev.type == pygame.QUIT:
+                            pygame.quit()
+                            raise SystemExit
+                    try:
+                        notifier.update()
+                        notifier.draw(self.screen)
+                    except Exception:
+                        pass
+                    pygame.display.flip()
+                    clk.tick(60)
+            except Exception:
+                # If notifier isn't available, continue silently
+                pass
+        except Exception:
+            # if achievements system isn't available, silently continue
+            pass
+        # Signal to the outer game loop that the game should finish and
+        # return to the main menu. Do not call pygame.quit() or sys.exit().
+        self._end_game = True
+        return
 
