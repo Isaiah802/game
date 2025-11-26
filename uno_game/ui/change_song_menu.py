@@ -1,36 +1,29 @@
 import os
-import pygame
+from direct.gui.DirectGui import DirectFrame, DirectLabel, DirectButton, DirectScrolledList
 from typing import List, Optional
 
 
 class ChangeSongMenu:
-    """Simple menu to pick a music file from the audio folder.
-
-    Usage:
-        menu = ChangeSongMenu(screen, audio_folder)
-        choice = menu.run()  # returns filename or None
-    """
-
-    def __init__(self, screen: pygame.Surface, audio_folder: str, width=800, height=600, audio_manager=None):
-        self.screen = screen
-        # If an AudioManager was provided, prefer its songs_folder
+    """3D menu to pick a music file from the audio folder using Panda3D DirectGui."""
+    def __init__(self, audio_folder: str, audio_manager=None, base=None):
         self.audio = audio_manager
         if audio_manager is not None and hasattr(audio_manager, 'songs_folder'):
             self.audio_folder = audio_manager.songs_folder
         else:
             self.audio_folder = audio_folder
-        self.width = width
-        self.height = height
-        self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont('Arial', 24)
-        self.title_font = pygame.font.SysFont('Arial', 36, bold=True)
+        self.base = base if base is not None else self._get_base()
         self.files: List[str] = []
         self.selected = 0
-        # optional AudioManager for live preview (may have been set earlier)
-        if getattr(self, 'audio', None) is None:
-            self.audio = audio_manager
+        self.result = None
         self._last_preview_index = None
         self._load_files()
+        self._build_ui()
+
+    def _get_base(self):
+        try:
+            return base
+        except NameError:
+            raise RuntimeError("No Panda3D ShowBase instance found. Pass 'base' to ChangeSongMenu.")
 
     def _load_files(self):
         if not os.path.exists(self.audio_folder):
@@ -41,59 +34,50 @@ class ChangeSongMenu:
         if not self.files:
             self.selected = 0
 
-    def draw(self):
-        self.screen.fill((25, 25, 50))
-        title = self.title_font.render('Select Music', True, (255, 255, 255))
-        tr = title.get_rect(center=(self.width // 2, 60))
-        self.screen.blit(title, tr)
+    def _build_ui(self):
+        self.frame = DirectFrame(frameColor=(0.09,0.09,0.18,0.95), frameSize=(-1,1,-0.7,0.7), pos=(0,0,0))
+        self.title = DirectLabel(text='Select Music', scale=0.12, pos=(0,0,0.55), parent=self.frame, text_fg=(1,1,1,1))
+        self.song_list = DirectScrolledList(
+            decButton_pos=(0.8, 0, 0.2),
+            incButton_pos=(0.8, 0, -0.2),
+            frameSize=(-0.75, 0.75, -0.3, 0.3),
+            pos=(0,0,0.1),
+            parent=self.frame,
+            itemFrame_frameSize=(-0.7, 0.7, -0.25, 0.25),
+            itemFrame_pos=(0,0,0),
+            items=self.files if self.files else ['No music files found in folder.'],
+            numItemsVisible=8,
+            forceHeight=0.07,
+            itemText_scale=0.07
+        )
+        self.play_btn = DirectButton(text='Play', scale=0.08, pos=(-0.3,0,-0.45), parent=self.frame, command=self._on_play)
+        self.cancel_btn = DirectButton(text='Cancel', scale=0.08, pos=(0.3,0,-0.45), parent=self.frame, command=self._on_cancel)
+        self.instructions = DirectLabel(text='Select a song and press Play, or Cancel', scale=0.07, pos=(0,0,-0.6), parent=self.frame, text_fg=(0.8,0.8,0.8,1))
 
-        start_y = 120
-        gap = 40
-        for i, fname in enumerate(self.files):
-            color = (255, 255, 0) if i == self.selected else (255, 255, 255)
-            txt = self.font.render(fname, True, color)
-            self.screen.blit(txt, (80, start_y + i * gap))
-
-        if not self.files:
-            msg = self.font.render('No music files found in folder.', True, (200, 200, 200))
-            self.screen.blit(msg, (80, 140))
-
-        instr = self.font.render('Up/Down to select, Enter to play & return, Esc to cancel', True, (180, 180, 180))
-        ir = instr.get_rect(center=(self.width // 2, self.height - 40))
-        self.screen.blit(instr, ir)
-
-        pygame.display.flip()
-
-    def run(self) -> Optional[str]:
-        running = True
-        result: Optional[str] = None
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_UP:
-                        if self.files:
-                            self.selected = (self.selected - 1) % len(self.files)
-                            # preview new selection
-                            self._maybe_preview()
-                    elif event.key == pygame.K_DOWN:
-                        if self.files:
-                            self.selected = (self.selected + 1) % len(self.files)
-                            # preview new selection
-                            self._maybe_preview()
-                    elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
-                        if self.files:
-                            result = self.files[self.selected]
-                            running = False
-                    elif event.key == pygame.K_ESCAPE:
-                        running = False
-            # Also preview if selection changed via other means
+    def _on_play(self):
+        idx = self.song_list.getSelectedIndex()
+        if self.files and 0 <= idx < len(self.files):
+            self.selected = idx
             self._maybe_preview()
-            self.draw()
-            self.clock.tick(60)
+            self.result = self.files[self.selected]
+            self.frame.hide()
+        else:
+            self.result = None
+            self.frame.hide()
 
-        return result
+    def _on_cancel(self):
+        self.result = None
+        self.frame.hide()
+
+    def show(self):
+        self.frame.show()
+        self.result = None
+
+    def run(self):
+        self.show()
+        while self.result is None:
+            self.base.taskMgr.step()
+        return self.result
 
     def _maybe_preview(self):
         """Play a short preview when the highlighted selection changes."""

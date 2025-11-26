@@ -1,161 +1,91 @@
 """
 Visual display for active status effects on players.
 """
-import pygame
+from direct.gui.DirectGui import DirectFrame, DirectLabel
+from direct.showbase.ShowBase import ShowBase
 from items.consumables import Effect
 
 
 class StatusDisplay:
-    """Displays active status effects for players during the game."""
-    
-    # Effect icons/colors
+    """Displays active status effects for players using Panda3D DirectGui."""
     EFFECT_INFO = {
         Effect.ENERGY_BOOST: {
-            'color': (255, 215, 0),  # Gold
+            'color': (1, 0.84, 0),  # Gold
             'symbol': '⚡',
             'short_name': 'Energy'
         },
         Effect.LUCK_BOOST: {
-            'color': (0, 255, 127),  # Spring green
+            'color': (0, 1, 0.5),  # Spring green
             'symbol': '🍀',
             'short_name': 'Luck'
         },
         Effect.FOCUS_BOOST: {
-            'color': (100, 149, 237),  # Cornflower blue
+            'color': (0.39, 0.58, 0.93),  # Cornflower blue
             'symbol': '🎯',
             'short_name': 'Focus'
         },
         Effect.MOOD_BOOST: {
-            'color': (255, 105, 180),  # Hot pink
+            'color': (1, 0.41, 0.7),  # Hot pink
             'symbol': '😊',
             'short_name': 'Mood'
         }
     }
-    
-    def __init__(self):
-        """Initialize the status display."""
-        self.font_small = pygame.font.SysFont('Arial', 16)
-        self.font_tiny = pygame.font.SysFont('Arial', 12)
-        
-    def draw_player_effects(self, screen: pygame.Surface, player_name: str, 
-                           active_effects: dict, x: int, y: int, compact: bool = False):
-        """Draw active effects for a single player.
-        
-        Args:
-            screen: Pygame surface to draw on
-            player_name: Name of the player
-            active_effects: Dictionary of {Effect: turns_remaining}
-            x: X coordinate for top-left
-            y: Y coordinate for top-left
-            compact: If True, use compact display (just icons)
-        """
-        if not active_effects:
-            return
-            
-        current_x = x
-        current_y = y
-        
+
+    def __init__(self, base=None):
+        self.base = base if base is not None else self._get_base()
+        self.labels = []
+        self.frame = None
+
+    def _get_base(self):
+        try:
+            return base
+        except NameError:
+            raise RuntimeError("No Panda3D ShowBase instance found. Pass 'base' to StatusDisplay.")
+
+    def show_player_effects(self, player_name: str, active_effects: dict, pos=(0,0), compact=False):
+        if self.frame:
+            self.frame.destroy()
+        self.frame = DirectFrame(frameColor=(0.08,0.08,0.15,0.95), frameSize=(-0.7,0.7,-0.2,0.2), pos=(pos[0],0,pos[1]))
+        x = -0.65
+        y = 0.12
         for effect, turns_left in active_effects.items():
             if effect not in self.EFFECT_INFO:
                 continue
-                
             info = self.EFFECT_INFO[effect]
-            
-            if compact:
-                # Compact mode: just colored circle with symbol
-                radius = 12
-                pygame.draw.circle(screen, info['color'], (current_x + radius, current_y + radius), radius)
-                pygame.draw.circle(screen, (0, 0, 0), (current_x + radius, current_y + radius), radius, 2)
-                
-                # Draw turns remaining
-                turns_surf = self.font_tiny.render(str(turns_left), True, (255, 255, 255))
-                turns_rect = turns_surf.get_rect(center=(current_x + radius, current_y + radius))
-                screen.blit(turns_surf, turns_rect)
-                
-                current_x += radius * 2 + 5
-            else:
-                # Full mode: colored box with name and turns
-                width = 80
-                height = 30
-                
-                # Background box
-                box_rect = pygame.Rect(current_x, current_y, width, height)
-                pygame.draw.rect(screen, info['color'], box_rect)
-                pygame.draw.rect(screen, (0, 0, 0), box_rect, 2)
-                
-                # Effect name
-                name_surf = self.font_small.render(info['short_name'], True, (0, 0, 0))
-                name_rect = name_surf.get_rect(centerx=current_x + width//2, top=current_y + 3)
-                screen.blit(name_surf, name_rect)
-                
-                # Turns remaining
-                turns_surf = self.font_tiny.render(f"{turns_left} turns", True, (0, 0, 0))
-                turns_rect = turns_surf.get_rect(centerx=current_x + width//2, bottom=current_y + height - 3)
-                screen.blit(turns_surf, turns_rect)
-                
-                current_y += height + 5
-    
-    def draw_all_players_effects(self, screen: pygame.Surface, game_manager, 
-                                 x: int = 10, y: int = 100):
-        """Draw effects for all players in a list format.
-        
-        Args:
-            screen: Pygame surface to draw on
-            game_manager: GameManager instance with player data
-            x: Starting X coordinate
-            y: Starting Y coordinate
-        """
-        current_y = y
-        
-        # Title
-        title_surf = self.font_small.render("Active Effects:", True, (255, 255, 255))
-        screen.blit(title_surf, (x, current_y))
-        current_y += 25
-        
+            label_text = f"{info['symbol']} {info['short_name']}: {turns_left} turns"
+            label = DirectLabel(text=label_text, scale=0.07, pos=(x,0,y), parent=self.frame, text_fg=info['color']+(1,))
+            self.labels.append(label)
+            y -= 0.09
+
+    def show_all_players_effects(self, game_manager, pos=(0,0)):
+        if self.frame:
+            self.frame.destroy()
+        self.frame = DirectFrame(frameColor=(0.08,0.08,0.15,0.95), frameSize=(-0.7,0.7,-0.6,0.6), pos=(pos[0],0,pos[1]))
+        y = 0.55
+        title = DirectLabel(text='Active Effects:', scale=0.08, pos=(-0.65,0,y), parent=self.frame, text_fg=(1,1,1,1))
+        y -= 0.09
         for player_name in game_manager.player_order:
             effects = game_manager.get_active_effects(player_name)
-            
             if effects:
-                # Player name
-                name_surf = self.font_small.render(f"{player_name}:", True, (200, 200, 200))
-                screen.blit(name_surf, (x + 5, current_y))
-                current_y += 20
-                
-                # Effects
-                self.draw_player_effects(screen, player_name, effects, x + 15, current_y, compact=False)
-                current_y += len(effects) * 35 + 10
+                name_label = DirectLabel(text=f"{player_name}:", scale=0.07, pos=(-0.6,0,y), parent=self.frame, text_fg=(0.8,0.8,0.8,1))
+                y -= 0.07
+                for effect, turns_left in effects.items():
+                    info = self.EFFECT_INFO.get(effect)
+                    if info:
+                        label_text = f"{info['symbol']} {info['short_name']}: {turns_left} turns"
+                        DirectLabel(text=label_text, scale=0.07, pos=(-0.55,0,y), parent=self.frame, text_fg=info['color']+(1,))
+                        y -= 0.07
+                y -= 0.04
 
-
-def draw_compact_player_status(screen: pygame.Surface, player_name: str, chips: int,
-                               active_effects: dict, x: int, y: int):
-    """Draw a compact status bar for a player showing chips and effects.
-    
-    Args:
-        screen: Pygame surface to draw on
-        player_name: Name of the player
-        chips: Number of chips the player has
-        active_effects: Dictionary of {Effect: turns_remaining}
-        x: X coordinate
-        y: Y coordinate
-    """
-    font = pygame.font.SysFont('Arial', 18, bold=True)
-    
-    # Background panel
-    panel_width = 200
-    panel_height = 40
-    panel_rect = pygame.Rect(x, y, panel_width, panel_height)
-    pygame.draw.rect(screen, (40, 40, 60, 200), panel_rect)
-    pygame.draw.rect(screen, (100, 100, 150), panel_rect, 2)
-    
-    # Player name and chips
+def show_compact_player_status(player_name: str, chips: int, active_effects: dict, pos=(0,0), base=None):
+    frame = DirectFrame(frameColor=(0.16,0.16,0.25,0.95), frameSize=(-0.4,0.4,-0.08,0.08), pos=(pos[0],0,pos[1]))
     text = f"{player_name}: {chips} chips"
-    text_surf = font.render(text, True, (255, 255, 255))
-    screen.blit(text_surf, (x + 5, y + 5))
-    
-    # Draw effects as small icons
-    if active_effects:
-        display = StatusDisplay()
-        effects_x = x + 5
-        effects_y = y + panel_height - 20
-        display.draw_player_effects(screen, player_name, active_effects, 
-                                    effects_x, effects_y, compact=True)
+    DirectLabel(text=text, scale=0.07, pos=(-0.35,0,0.04), parent=frame, text_fg=(1,1,1,1))
+    x = -0.35
+    y = -0.02
+    for effect, turns_left in active_effects.items():
+        info = StatusDisplay.EFFECT_INFO.get(effect)
+        if info:
+            label_text = f"{info['symbol']} {turns_left}"
+            DirectLabel(text=label_text, scale=0.06, pos=(x,0,y), parent=frame, text_fg=info['color']+(1,))
+            x += 0.13

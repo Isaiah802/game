@@ -1,23 +1,24 @@
 """
 Module for managing game settings and keybindings.
 """
+import pygame
 import json
 import os
-import pygame
+ 
 from typing import Dict, Any
 
 # Default keybindings
 DEFAULT_KEYBINDINGS = {
-    'inventory': pygame.K_i,        # Open inventory/shop
-    'roll_dice': pygame.K_SPACE,    # Roll dice
-    'menu': pygame.K_ESCAPE,        # Open menu
-    'fullscreen': pygame.K_f,       # Toggle fullscreen
-    'confirm': pygame.K_RETURN,     # Confirm selection
-    'back': pygame.K_BACKSPACE,     # Go back
-    'up': pygame.K_UP,             # Navigate up
-    'down': pygame.K_DOWN,         # Navigate down
-    'left': pygame.K_LEFT,         # Navigate left
-    'right': pygame.K_RIGHT        # Navigate right
+    'inventory': 'i',        # Open inventory/shop
+    'roll_dice': 'space',    # Roll dice
+    'menu': 'escape',        # Open menu
+    'fullscreen': 'f',       # Toggle fullscreen
+    'confirm': 'enter',     # Confirm selection
+    'back': 'backspace',     # Go back
+    'up': 'up',             # Navigate up
+    'down': 'down',         # Navigate down
+    'left': 'left',         # Navigate left
+    'right': 'right'        # Navigate right
 }
 
 # Key name mappings for display

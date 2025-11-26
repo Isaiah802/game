@@ -1,119 +1,105 @@
-import pygame
-from typing import Callable, Optional
 
-
-class Button:
-    def __init__(self, rect: pygame.Rect, text: str, callback: Callable[[], None], font: pygame.font.Font, bg=(200, 200, 200), fg=(0, 0, 0)):
-        self.rect = rect
-        self.text = text
-        self.callback = callback
-        self.font = font
-        self.bg = bg
-        self.fg = fg
-
-    def draw(self, surface: pygame.Surface):
-        bg = self.bg
-        if getattr(self, 'hovered', False):
-            # slightly darker when hovered
-            bg = tuple(max(0, c - 30) for c in self.bg)
-        pygame.draw.rect(surface, bg, self.rect)
-        pygame.draw.rect(surface, (0, 0, 0), self.rect, 2)
-        txt = self.font.render(self.text, True, self.fg)
-        txt_r = txt.get_rect(center=self.rect.center)
-        surface.blit(txt, txt_r)
-
-    def handle_event(self, event: pygame.event.Event):
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
-            if self.rect.collidepoint(event.pos):
-                self.callback()
-        elif event.type == pygame.MOUSEMOTION:
-            self.hovered = self.rect.collidepoint(event.pos)
-
+# Panda3D 3D Start Menu using DirectGui
+from direct.showbase.ShowBase import ShowBase
+from direct.gui.DirectGui import DirectButton, DirectFrame, DirectLabel
 
 class StartMenu:
-    """Simple Start Menu UI using pygame.
-
-    Usage:
-        menu = StartMenu(screen)
-        choice = menu.run()  # returns one of: 'play', 'settings', 'change_song', 'quit'
-    """
-
-    def __init__(self, screen: pygame.Surface, width=800, height=600):
-        self.screen = screen
+    def __init__(self, width=1.5, height=1.0, base=None):
         self.width = width
         self.height = height
-        self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont('Arial', 28)
-        self.title_font = pygame.font.SysFont('Arial', 48, bold=True)
-        self.result: Optional[str] = None
-
-        # Buttons will be created in build_ui
-        self.buttons = []
-        self.build_ui()
-
-    def build_ui(self):
-        btn_w, btn_h = 240, 60
-        start_x = (self.width - btn_w) // 2
-        start_y = 220
-        gap = 20
-
-        def make_btn(i, text, key):
-            r = pygame.Rect(start_x, start_y + i * (btn_h + gap), btn_w, btn_h)
-
-            def cb():
-                self.result = key
-
-            return Button(rect=r, text=text, callback=cb, font=self.font, bg=(240, 240, 240))
-
-        self.buttons = [
-            make_btn(0, "Play", 'play'),
-            make_btn(1, "Audio Settings", 'settings'),
-            make_btn(2, "Change Song", 'change_song'),
-            make_btn(3, "Keybindings", 'keybindings'),
-            make_btn(4, "Quit", 'quit'),
-        ]
-        # keyboard selection index
-        self.selected = 0
-        # initialize hovered state
-        for i, b in enumerate(self.buttons):
-            b.hovered = (i == self.selected)
-
-    def draw(self):
-        self.screen.fill((20, 120, 20))
-        title = self.title_font.render("Game - Start Menu", True, (255, 255, 255))
-        tr = title.get_rect(center=(self.width // 2, 120))
-        self.screen.blit(title, tr)
-
-        for b in self.buttons:
-            b.draw(self.screen)
-
-        pygame.display.flip()
-
-    def handle_events(self):
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                self.result = 'quit'
-            for b in self.buttons:
-                b.handle_event(event)
-            # keyboard navigation
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_UP:
-                    self.selected = (self.selected - 1) % len(self.buttons)
-                    for i, b in enumerate(self.buttons):
-                        b.hovered = (i == self.selected)
-                elif event.key == pygame.K_DOWN:
-                    self.selected = (self.selected + 1) % len(self.buttons)
-                    for i, b in enumerate(self.buttons):
-                        b.hovered = (i == self.selected)
-                elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
-                    # trigger the selected button
-                    self.buttons[self.selected].callback()
-
-    def run(self) -> str:
-        """Run the menu loop until the user chooses an option; returns the choice key."""
         self.result = None
+        self.base = base if base is not None else self._get_base()
+        self.frame = DirectFrame(frameColor=(0.1,0.2,0.1,0.95), frameSize=(-width/2,width/2,-height/2,height/2), pos=(0,0,0))
+        self.title = DirectLabel(text="Game - Start Menu", scale=0.12, pos=(0,0,height/2-0.18), parent=self.frame, text_fg=(1,1,1,1))
+        self.buttons = []
+        self._build_buttons()
+        self._setup_animated_background()
+        self._load_sounds()
+    def _setup_animated_background(self):
+        # Add floating dice/chips as animated OnscreenImages
+        from direct.gui.OnscreenImage import OnscreenImage
+        from panda3d.core import TransparencyAttrib
+        import math, random
+        self.bg_elements = []
+        dice_img = 'assets/cards/dice/dice1.png'  # Example dice image path
+        chip_img = 'assets/cards/chips.png'       # Example chip image path
+        for i in range(3):
+            img_path = dice_img if i % 2 == 0 else chip_img
+            elem = OnscreenImage(image=img_path, pos=(random.uniform(-0.7,0.7), 0, random.uniform(-0.3,0.3)), scale=0.12, parent=self.frame)
+            elem.setTransparency(TransparencyAttrib.MAlpha)
+            self.bg_elements.append(elem)
+        # Animate elements in a task
+        def animate_bg(task):
+            t = task.time
+            for i, elem in enumerate(self.bg_elements):
+                elem.setPos(math.sin(t + i)*0.7, 0, math.cos(t + i*1.5)*0.3)
+            return task.cont
+        self.base.taskMgr.add(animate_bg, 'animate_bg')
+
+    def _load_sounds(self):
+        # Load sound effects for button clicks
+        try:
+            from audio.audio import AudioManager
+            self.audio = AudioManager(audio_folder='assets/sounds')
+            self.click_sound = 'menu_click.wav'  # Example sound file
+        except Exception:
+            self.audio = None
+            self.click_sound = None
+
+    def _get_base(self):
+        try:
+            return base
+        except NameError:
+            raise RuntimeError("No Panda3D ShowBase instance found. Pass 'base' to StartMenu.")
+
+    def _build_buttons(self):
+        btn_texts = [
+            ("Play", 'play'),
+            ("Audio Settings", 'settings'),
+            ("Change Song", 'change_song'),
+            ("Keybindings", 'keybindings'),
+            ("Local WiFi Play (Coming Soon)", 'multiplayer_soon'),
+            ("Quit", 'quit'),
+        ]
+        gap = 0.18
+        for i, (text, key) in enumerate(btn_texts):
+            btn = DirectButton(
+                text=text,
+                scale=0.09,
+                pos=(0,0,self.height/2-0.35-gap*i),
+                parent=self.frame,
+                command=lambda k=key: self._on_select(k),
+                frameColor=(0.2,0.2,0.3,1),
+                text_fg=(0.95,0.95,0.95,1),
+                pressEffect=1,
+                relief=1,
+                borderWidth=(0.02,0.02)
+            )
+            from direct.gui.DirectGui import DGG
+            btn.bind(DGG.ENTER, lambda e, b=btn: b.setColor((0.3,0.4,0.6,1), 1))
+            btn.bind(DGG.EXIT, lambda e, b=btn: b.setColor((0.2,0.2,0.3,1), 1))
+            btn.bind(DGG.B1PRESS, lambda e, b=btn: b.setColor((0.5,0.5,0.7,1), 1))
+            btn.bind(DGG.B1RELEASE, lambda e, b=btn: b.setColor((0.3,0.4,0.6,1), 1))
+            # Play sound on click
+            btn['command'] = lambda k=key: self._play_click_sound(k)
+            self.buttons.append(btn)
+
+    def _play_click_sound(self, key):
+        if self.audio and self.click_sound:
+            self.audio.play_sfx(self.click_sound)
+        self._on_select(key)
+
+    def _on_select(self, key):
+        self.result = key
+        self.frame.hide()
+
+    def show(self):
+        self.frame.show()
+        self.result = None
+
+    def run(self):
+        self.show()
+        # Wait for user selection
         while self.result is None:
-            self.handle_events()
-            self.draw()
-            self.clock.tick(60)
+            self.base.taskMgr.step()
         return self.result

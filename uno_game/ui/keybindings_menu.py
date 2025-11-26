@@ -1,34 +1,20 @@
 """
 UI for changing game keybindings.
 """
-import pygame
-from typing import Dict, Optional, Tuple
+from direct.gui.DirectGui import DirectFrame, DirectLabel, DirectButton, DirectScrolledList
+from direct.showbase.ShowBase import ShowBase
+from typing import Tuple
 from settings import Settings, KEY_NAMES
 
 class KeybindingsMenu:
-    """Menu for viewing and changing game keybindings."""
-    
-    def __init__(self, screen: pygame.Surface, settings: Settings):
-        self.screen = screen
+    """3D Keybindings menu using Panda3D DirectGui."""
+    def __init__(self, settings: Settings, base=None):
         self.settings = settings
-        self.font = pygame.font.SysFont('Arial', 24)
-        self.small_font = pygame.font.SysFont('Arial', 20)
-        
-        # Colors
-        self.bg_color = (20, 20, 30)  # Solid background instead of semi-transparent
-        self.text_color = (220, 220, 220)
-        self.selected_color = (255, 255, 255)
-        self.key_color = (100, 200, 255)
-        self.action_color = (200, 200, 200)
-        
-        # State
+        self.base = base if base is not None else self._get_base()
+        self.selected_action = next(iter(self.settings.keybindings.keys()), None)
         self.waiting_for_key = False
         self.scroll_offset = 0
         self.max_visible_bindings = 8
-        # Initialize selected action to first keybinding
-        self.selected_action = next(iter(self.settings.keybindings.keys()), None)
-        
-        # Simplified action descriptions (shorter)
         self.action_descriptions = {
             'inventory': 'Food & Drinks',
             'roll_dice': 'Roll Dice',
@@ -41,108 +27,87 @@ class KeybindingsMenu:
             'left': 'Left',
             'right': 'Right'
         }
+        self.result = None
+        self._build_ui()
+
+    def _get_base(self):
+        try:
+            return base
+        except NameError:
+            raise RuntimeError("No Panda3D ShowBase instance found. Pass 'base' to KeybindingsMenu.")
+
+    def _build_ui(self):
+        self.frame = DirectFrame(frameColor=(0.08,0.08,0.15,0.95), frameSize=(-1,1,-0.7,0.7), pos=(0,0,0))
+        self.title = DirectLabel(text='Keybindings', scale=0.11, pos=(0,0,0.55), parent=self.frame, text_fg=(1,1,1,1))
+        self.instructions = DirectLabel(text='Select an action and press Change to rebind', scale=0.07, pos=(0,0,0.45), parent=self.frame, text_fg=(0.9,0.9,0.9,1))
+        self.binding_list = DirectScrolledList(
+            decButton_pos=(0.8, 0, 0.2),
+            incButton_pos=(0.8, 0, -0.2),
+            frameSize=(-0.75, 0.75, -0.3, 0.3),
+            pos=(0,0,0.1),
+            parent=self.frame,
+            itemFrame_frameSize=(-0.7, 0.7, -0.25, 0.25),
+            itemFrame_pos=(0,0,0),
+            items=self._get_binding_items(),
+            numItemsVisible=self.max_visible_bindings,
+            forceHeight=0.07,
+            itemText_scale=0.07
+        )
+        self.change_btn = DirectButton(text='Change', scale=0.08, pos=(-0.3,0,-0.45), parent=self.frame, command=self._on_change)
+        self.reset_btn = DirectButton(text='Reset', scale=0.08, pos=(0,0,-0.45), parent=self.frame, command=self._on_reset)
+        self.back_btn = DirectButton(text='Back', scale=0.08, pos=(0.3,0,-0.45), parent=self.frame, command=self._on_back)
+
+    def _get_binding_items(self):
+        items = []
+        for action, key in self.settings.keybindings.items():
+            desc = self.action_descriptions.get(action, action.replace('_', ' ').title())
+            key_name = self.settings.get_key_name(key)
+            items.append(f"{desc}: {key_name}")
+        return items
+
+    def _on_change(self):
+        idx = self.binding_list.getSelectedIndex()
+        actions = list(self.settings.keybindings.keys())
+        if 0 <= idx < len(actions):
+            self.selected_action = actions[idx]
+            self.waiting_for_key = True
+            self.instructions['text'] = f"Press any key to bind {self.action_descriptions.get(self.selected_action, self.selected_action)}"
+            self.base.accept('arrow_up', self._on_key, ['arrow_up'])
+            self.base.accept('arrow_down', self._on_key, ['arrow_down'])
+            self.base.accept('arrow_left', self._on_key, ['arrow_left'])
+            self.base.accept('arrow_right', self._on_key, ['arrow_right'])
+            self.base.accept('enter', self._on_key, ['enter'])
+            self.base.accept('escape', self._on_cancel)
+
+    def _on_key(self, key_name):
+        if self.waiting_for_key and self.selected_action:
+            self.settings.set_key(self.selected_action, key_name)
+            self.waiting_for_key = False
+            self.instructions['text'] = 'Select an action and press Change to rebind'
+            self.binding_list['items'] = self._get_binding_items()
+            self.base.ignoreAll()
+
+    def _on_cancel(self):
+        self.waiting_for_key = False
+        self.instructions['text'] = 'Select an action and press Change to rebind'
+        self.base.ignoreAll()
+
+    def _on_reset(self):
+        self.settings.reset_keybindings()
+        self.binding_list['items'] = self._get_binding_items()
+
+    def _on_back(self):
+        self.result = 'back'
+        self.frame.hide()
+
+    def show(self):
+        self.frame.show()
+        self.result = None
+
+    def run(self):
+        self.show()
+        while self.result is None:
+            self.base.taskMgr.step()
+        return self.result
     
-    def draw_binding(self, action: str, key: int, pos: Tuple[int, int], selected: bool = False):
-        """Draw a single keybinding."""
-        x, y = pos
-        width = 640
-        height = 40
-        
-        # Background for selected item
-        if selected:
-            pygame.draw.rect(self.screen, (60, 80, 120), (x-5, y-5, width+10, height+10), border_radius=5)
-        
-        # Action name
-        action_text = action.replace('_', ' ').title()
-        desc = self.action_descriptions.get(action, action_text)
-        action_surf = self.font.render(f"{desc}", True, 
-                                     self.selected_color if selected else self.action_color)
-        self.screen.blit(action_surf, (x, y + 10))
-        
-        # Key name (on the right)
-        key_name = self.settings.get_key_name(key)
-        if self.waiting_for_key and selected:
-            key_name = "Press any key..."
-        key_surf = self.font.render(key_name, True, 
-                                  (255, 255, 100) if selected else self.key_color)
-        key_rect = key_surf.get_rect(right=x + width - 10, centery=y + height//2)
-        self.screen.blit(key_surf, key_rect)
-    
-    def draw(self):
-        """Draw the keybindings menu."""
-        width = 700
-        height = 550
-        x = (self.screen.get_width() - width) // 2
-        y = (self.screen.get_height() - height) // 2
-        
-        # Solid background
-        pygame.draw.rect(self.screen, self.bg_color, (x, y, width, height))
-        pygame.draw.rect(self.screen, (100, 100, 120), (x, y, width, height), 3)  # Border
-        
-        # Title
-        title = self.font.render("Keybindings", True, self.text_color)
-        self.screen.blit(title, (x + (width - title.get_width()) // 2, y + 20))
-        
-        # Instructions
-        if self.waiting_for_key:
-            inst = self.small_font.render("Press any key to bind, ESC to cancel", True, self.text_color)
-        else:
-            inst = self.small_font.render("Arrow keys: Navigate | Enter: Change | R: Reset | ESC: Back", True, self.text_color)
-        self.screen.blit(inst, (x + (width - inst.get_width()) // 2, y + 60))
-        
-        # Draw keybindings
-        y_pos = y + 100
-        visible_actions = list(self.settings.keybindings.items())[self.scroll_offset:
-                                                                self.scroll_offset + self.max_visible_bindings]
-        
-        for action, key in visible_actions:
-            self.draw_binding(action, key, (x + 30, y_pos), action == self.selected_action)
-            y_pos += 50
-        
-        # Scroll indicators
-        if self.scroll_offset > 0:
-            pygame.draw.polygon(self.screen, self.text_color, 
-                             [(x + width//2, y + 85), (x + width//2 - 10, y + 75), (x + width//2 + 10, y + 75)])
-        if self.scroll_offset + self.max_visible_bindings < len(self.settings.keybindings):
-            pygame.draw.polygon(self.screen, self.text_color,
-                             [(x + width//2, y + height - 15), (x + width//2 - 10, y + height - 25), (x + width//2 + 10, y + height - 25)])
-    
-    def handle_event(self, event: pygame.event.Event) -> bool:
-        """Handle input events. Returns True if menu should close."""
-        if self.waiting_for_key:
-            if event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    self.waiting_for_key = False
-                else:
-                    self.settings.set_key(self.selected_action, event.key)
-                    self.waiting_for_key = False
-            return False
-        
-        if event.type == pygame.KEYDOWN:
-            actions = list(self.settings.keybindings.keys())
-            current_idx = actions.index(self.selected_action) if self.selected_action else 0
-            
-            if event.key == pygame.K_ESCAPE:
-                return True
-                
-            elif event.key == pygame.K_r:
-                self.settings.reset_keybindings()
-                
-            elif event.key == pygame.K_UP:
-                if current_idx > 0:
-                    current_idx -= 1
-                    self.selected_action = actions[current_idx]
-                    if current_idx < self.scroll_offset:
-                        self.scroll_offset = current_idx
-                        
-            elif event.key == pygame.K_DOWN:
-                if current_idx < len(actions) - 1:
-                    current_idx += 1
-                    self.selected_action = actions[current_idx]
-                    if current_idx >= self.scroll_offset + self.max_visible_bindings:
-                        self.scroll_offset = current_idx - self.max_visible_bindings + 1
-                        
-            elif event.key == pygame.K_RETURN and self.selected_action:
-                self.waiting_for_key = True
-        
-        return False
+    # All input and rendering is now handled by Panda3D DirectGui. Obsolete pygame-based methods removed.

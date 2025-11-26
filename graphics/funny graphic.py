@@ -109,11 +109,7 @@ def main():
 
     running = True
     while running:
-        # --- Event Handling ---
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-
+        # Panda3D DirectGui input/callbacks will be handled here.
         # --- Update ---
         for die in dice_group:
             die.update()

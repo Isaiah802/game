@@ -17,8 +17,7 @@ from panda3d.core import (
     Texture, PNMImage, TransparencyAttrib,
     DirectionalLight, AmbientLight,
     Material, AntialiasAttrib, TextNode,
-    Filename, loadPrcFileData, LineSegs,
-    globalClock
+    Filename, loadPrcFileData, LineSegs
 )
 from panda3d.bullet import (
     BulletWorld, BulletPlaneShape, 
@@ -37,9 +36,8 @@ TABLE_DEPTH_PHYSICS = 12.0
 WALL_HEIGHT = 15.0
 
 # --- 2. VISUAL TABLE ALIGNMENT (The 3D Model) ---
-# Use F1 to see the mismatch, then change these numbers.
 TABLE_MODEL_SCALE = 12     # Make the table bigger/smaller
-TABLE_VISUAL_Z = -6   # Move table UP (+) or DOWN (-) to match floor
+TABLE_VISUAL_Z = 0   # Move table UP (+) or DOWN (-) to match floor
 
 # --- DICE CONFIG ---
 DIE_SIZE = 0.8          
@@ -151,45 +149,113 @@ def create_die_face_texture(number, size=512):
                     bg = image.getXel(x, y)
                     inv = 1.0 - a
                     image.setXel(x, y, bg[0]*inv, bg[1]*inv, bg[2]*inv)
-    t = Texture()
-    t.load(image)
-    t.setMinfilter(Texture.FTLinearMipmapLinear)
-    t.setMagfilter(Texture.FTLinear)
-    return t
+        t = Texture()
+        t.load(image)
+        t.setMinfilter(Texture.FTLinearMipmapLinear)
+        t.setMagfilter(Texture.FTLinear)
+        return t
 
-class DiceSimulator(ShowBase):
-    def __init__(self):
-        ShowBase.__init__(self)
+
+class DiceSimulator:
+    def __init__(self, base):
+        self.base = base
+        self.mouseWatcherNode = self.base.mouseWatcherNode
+        # self.cam removed; use self.base.cam everywhere
+        print("[DiceSimulator] Initializing...")
         simplepbr.init(use_normal_maps=True, enable_shadows=True, use_occlusion_maps=True)
-        if hasattr(gltf, 'patch_loader'): gltf.patch_loader(self.loader)
-
+        if hasattr(gltf, 'patch_loader'):
+            gltf.patch_loader(self.base.loader)
         # Physics
         self.world = BulletWorld()
-        self.world.setGravity(Vec3(0, 0, -25.0)) 
-        
+        self.world.setGravity(Vec3(0, 0, -25.0))
         # Visuals
-        self.setBackgroundColor(0.05, 0.05, 0.1, 1) 
-        self.disableMouse()
-        self.camera.setPos(0, -28, 24)
-        self.camera.lookAt(0, 0, 0)
-        
+        self.base.setBackgroundColor(0.05, 0.05, 0.1, 1)
+        self.next_btn = DirectButton(text='Next Player', scale=0.07, pos=(1.0, 0, 0.7), frameColor=(0.2,0.2,0.3,1), text_fg=(0.95,0.95,0.95,1), command=self.next_player)
+        self.base.disableMouse()
+        self.base.camera.setPos(0, -28, 24)
+        self.base.camera.lookAt(0, 0, 0)
         # Lighting
         dlight = DirectionalLight('dlight')
         dlight.setColor((0.9, 0.9, 0.85, 1))
         dlight.setShadowCaster(True, 4096, 4096)
         lens = dlight.getLens(); lens.setFilmSize(30, 30)
-        self.render.setLight(self.render.attachNewNode(dlight))
-        self.render.attachNewNode(dlight).setHpr(45, -60, 0)
-        
+        self.base.render.setLight(self.base.render.attachNewNode(dlight))
+        self.base.render.attachNewNode(dlight).setHpr(45, -60, 0)
         alight = AmbientLight('alight')
         alight.setColor((0.4, 0.4, 0.4, 1))
-        self.render.setLight(self.render.attachNewNode(alight))
+        self.base.render.setLight(self.base.render.attachNewNode(alight))
+        print("[DiceSimulator] Creating die face textures...")
+        self.face_textures = {i: create_die_face_texture(i) for i in range(1, 7)}
+        print("[DiceSimulator] Creating poker table...")
+        self.create_poker_table()
+        print("[DiceSimulator] Spawning dice...")
+        self.dice = []
+        self.holding_dice = False
+        self.drag_plane = Plane(Vec3(0, 0, 1), Point3(0, 0, 6))
+        self.last_mouse_pos_3d = Point3(0, 0, 0)
+        self.mouse_velocity = Vec3(0, 0, 0)
+        self.base.accept('space', self.reset_position)
+        self.base.accept('mouse1', self.grab_dice)
+        self.base.accept('mouse1-up', self.throw_dice)
+        self.base.accept('f1', self.toggle_debug)
+        self.info_txt = OnscreenText(text="CLICK & DRAG to Throw | SPACE to Center | F1 to Calibrate", pos=(-0.9, 0.9), scale=0.06, fg=(1,1,1,1), align=TextNode.ALeft)
+        self.score_txt = OnscreenText(text="TOTAL: 0", pos=(0, 0.8), scale=0.12, fg=(1, 0.8, 0.2, 1), align=TextNode.ACenter, shadow=(0,0,0,1))
+        self.player_labels = []
+        self.current_player_idx = 0
+        self.update_player_ui()
+        self.next_btn = DirectButton(text='Next Player', scale=0.07, pos=(1.0, 0, 0.7), frameColor=(0.2,0.2,0.3,1), text_fg=(0.95,0.95,0.95,1), command=self.next_player)
+        self.spawn_dice()
+        print(f"[DiceSimulator] Dice spawned: {len(self.dice)}")
+        self.base.taskMgr.add(self.update, 'update')
+        self.player_inventory = Inventory()
+        self.shop_inventory_ui = ShopInventoryUI(self.base.render, self.player_inventory)
+        self.base.accept('i', self.toggle_inventory)
+
+    def get_player_camera_pos(self, idx, total):
+        radius = 18
+        angle = (2 * math.pi * idx) / total
+        x = radius * math.sin(angle)
+        y = -radius * math.cos(angle)
+        z = 12
+        h = (360 * idx) / total
+        return Point3(x, y, z), h
+
+    def move_camera_to_player(self, idx):
+        if hasattr(self, 'game_manager'):
+            pos, h = self.get_player_camera_pos(idx, len(self.game_manager.player_order))
+            self.base.camera.setPos(pos)
+            self.base.camera.setHpr(h, -30, 0)
+
+    # Duplicate __init__ removed
+
+        # Visuals
+        self.base.setBackgroundColor(0.05, 0.05, 0.1, 1)
+        # Add Next Player button for manual turn progression
+        self.next_btn = DirectButton(text='Next Player', scale=0.07, pos=(1.0, 0, 0.7), frameColor=(0.2,0.2,0.3,1), text_fg=(0.95,0.95,0.95,1), command=self.next_player)
+        self.base.disableMouse()
+        self.base.camera.setPos(0, -28, 24)
+        self.base.camera.lookAt(0, 0, 0)
+
+        # Lighting
+        dlight = DirectionalLight('dlight')
+        dlight.setColor((0.9, 0.9, 0.85, 1))
+        dlight.setShadowCaster(True, 4096, 4096)
+        lens = dlight.getLens(); lens.setFilmSize(30, 30)
+        self.base.render.setLight(self.base.render.attachNewNode(dlight))
+        self.base.render.attachNewNode(dlight).setHpr(45, -60, 0)
+
+        alight = AmbientLight('alight')
+        alight.setColor((0.4, 0.4, 0.4, 1))
+        self.base.render.setLight(self.base.render.attachNewNode(alight))
 
         # Scene
+        print("[DiceSimulator] Creating die face textures...")
         self.face_textures = {i: create_die_face_texture(i) for i in range(1, 7)}
+        print("[DiceSimulator] Creating poker table...")
         self.create_poker_table()
+        print("[DiceSimulator] Spawning dice...")
         self.dice = []
-        
+
         # Interaction
         self.holding_dice = False
         self.drag_plane = Plane(Vec3(0, 0, 1), Point3(0, 0, 6))
@@ -197,11 +263,135 @@ class DiceSimulator(ShowBase):
         self.mouse_velocity = Vec3(0, 0, 0)
 
         # Controls
-        self.accept('space', self.reset_position)
-        self.accept('mouse1', self.grab_dice)
-        self.accept('mouse1-up', self.throw_dice)
-        self.accept('f1', self.toggle_debug)
-        
+        self.base.accept('space', self.reset_position)
+        self.base.accept('mouse1', self.grab_dice)
+        self.base.accept('mouse1-up', self.throw_dice)
+        self.base.accept('f1', self.toggle_debug)
+
+        # UI
+        self.info_txt = OnscreenText(text="CLICK & DRAG to Throw | SPACE to Center | F1 to Calibrate", 
+                                     pos=(-0.9, 0.9), scale=0.06, fg=(1,1,1,1), align=TextNode.ALeft)
+        self.score_txt = OnscreenText(text="TOTAL: 0", pos=(0, 0.8), scale=0.12, 
+                                      fg=(1, 0.8, 0.2, 1), align=TextNode.ACenter, shadow=(0,0,0,1))
+
+        # --- PLAYER TURN & CHIP UI ---
+        self.player_labels = []
+        self.current_player_idx = 0
+        self.update_player_ui()
+        # Add Next Player button for manual turn progression
+        self.next_btn = DirectButton(text='Next Player', scale=0.07, pos=(1.0, 0, 0.7), frameColor=(0.2,0.2,0.3,1), text_fg=(0.95,0.95,0.95,1), command=self.next_player)
+
+        self.spawn_dice()
+        print(f"[DiceSimulator] Dice spawned: {len(self.dice)}")
+        self.base.taskMgr.add(self.update, 'update')
+
+        # --- SHOP/INVENTORY UI ---
+        self.player_inventory = Inventory()
+        self.shop_inventory_ui = ShopInventoryUI(self.base.render, self.player_inventory)
+        self.base.accept('i', self.toggle_inventory)
+
+    def update_player_ui(self):
+        # Remove old labels
+        for lbl in getattr(self, 'player_labels', []):
+            lbl.destroy()
+        self.player_labels = []
+        if hasattr(self, 'game_manager'):
+            y = 0.7
+            for i, name in enumerate(self.game_manager.player_order):
+                chips = self.game_manager.players[name]['chips']
+                turn_marker = '▶ ' if i == self.current_player_idx else '   '
+                lbl = DirectLabel(text=f"{turn_marker}{name}: {chips} chips", scale=0.07, pos=(-1.2, 0, y), frameColor=(0,0,0,0), text_fg=(1,1,0.7,1))
+                self.player_labels.append(lbl)
+                y -= 0.12
+
+    def next_player(self):
+        # Automate round progression: roll dice, update chips, advance turn
+        if hasattr(self, 'game_manager'):
+            player_name = self.game_manager.player_order[self.current_player_idx]
+            # Simulate dice roll (use 3 dice)
+            roll = [self.get_die_number(b) for b in self.dice]
+            score_info = self.game_manager._calculate_score(roll)
+            payout = score_info['payout']
+            # For demo: loser is always current player, winner is next
+            loser = player_name
+            winner_idx = (self.current_player_idx + 1) % len(self.game_manager.player_order)
+            winner = self.game_manager.player_order[winner_idx]
+            # Update chips
+            for p in self.game_manager.players:
+                if p != loser:
+                    self.game_manager.players[p]['chips'] -= payout
+                    self.game_manager.players[loser]['chips'] += payout
+            # Show result in UI
+            self.score_txt.setText(f"{player_name} rolled {roll} ({score_info['name']}) | +{payout} chips")
+            self.update_player_ui()
+            # Show shop/inventory menu
+            self.show_shop_inventory_menu()
+
+    def show_shop_inventory_menu(self):
+        # Create a frame with Shop, Inventory, Continue buttons
+        self.menu_frame = DirectFrame(frameColor=(0.1,0.1,0.2,0.95), frameSize=(-0.7,0.7,-0.3,0.3), pos=(0,0,0.5))
+        self.shop_btn = DirectButton(text='Shop', scale=0.08, pos=(-0.4,0,0.1), parent=self.menu_frame, command=self.open_shop)
+        self.inv_btn = DirectButton(text='Inventory', scale=0.08, pos=(0.0,0,0.1), parent=self.menu_frame, command=self.open_inventory)
+        self.cont_btn = DirectButton(text='Continue', scale=0.08, pos=(0.4,0,0.1), parent=self.menu_frame, command=self.continue_game)
+
+    def open_shop(self):
+        # Placeholder: show shop menu (implement actual shop logic here)
+        self.score_txt.setText('Shop opened (demo)')
+
+    def open_inventory(self):
+        # Placeholder: show inventory menu (implement actual inventory logic here)
+        self.score_txt.setText('Inventory opened (demo)')
+
+    def continue_game(self):
+        # Remove menu and advance turn
+        if hasattr(self, 'menu_frame'):
+            self.menu_frame.destroy()
+        self.current_player_idx = (self.current_player_idx + 1) % len(self.game_manager.player_order)
+        self.move_camera_to_player(self.current_player_idx)
+    def __init__(self, base):
+        self.base = base
+        simplepbr.init(use_normal_maps=True, enable_shadows=True, use_occlusion_maps=True)
+        if hasattr(gltf, 'patch_loader'): gltf.patch_loader(self.base.loader)
+
+        # Physics
+        self.world = BulletWorld()
+        self.world.setGravity(Vec3(0, 0, -25.0)) 
+
+        # Visuals
+        self.base.setBackgroundColor(0.05, 0.05, 0.1, 1) 
+        self.base.disableMouse()
+        self.base.camera.setPos(0, -28, 24)
+        self.base.camera.lookAt(0, 0, 0)
+
+        # Lighting
+        dlight = DirectionalLight('dlight')
+        dlight.setColor((0.9, 0.9, 0.85, 1))
+        dlight.setShadowCaster(True, 4096, 4096)
+        lens = dlight.getLens(); lens.setFilmSize(30, 30)
+        self.base.render.setLight(self.base.render.attachNewNode(dlight))
+        self.base.render.attachNewNode(dlight).setHpr(45, -60, 0)
+
+        alight = AmbientLight('alight')
+        alight.setColor((0.4, 0.4, 0.4, 1))
+        self.base.render.setLight(self.base.render.attachNewNode(alight))
+
+        # Scene
+        self.face_textures = {i: create_die_face_texture(i) for i in range(1, 7)}
+        self.create_poker_table()
+        self.dice = []
+
+        # Interaction
+        self.holding_dice = False
+        self.drag_plane = Plane(Vec3(0, 0, 1), Point3(0, 0, 6))
+        self.last_mouse_pos_3d = Point3(0, 0, 0)
+        self.mouse_velocity = Vec3(0, 0, 0)
+
+        # Controls
+        self.base.accept('space', self.reset_position)
+        self.base.accept('mouse1', self.grab_dice)
+        self.base.accept('mouse1-up', self.throw_dice)
+        self.base.accept('f1', self.toggle_debug)
+
         # UI
         self.info_txt = OnscreenText(text="CLICK & DRAG to Throw | SPACE to Center | F1 to Calibrate", 
                                      pos=(-0.9, 0.9), scale=0.06, fg=(1,1,1,1), align=TextNode.ALeft)
@@ -209,12 +399,12 @@ class DiceSimulator(ShowBase):
                                       fg=(1, 0.8, 0.2, 1), align=TextNode.ACenter, shadow=(0,0,0,1))
 
         self.spawn_dice()
-        self.taskMgr.add(self.update, 'update')
+        self.base.taskMgr.add(self.update, 'update')
 
         # --- SHOP/INVENTORY UI ---
         self.player_inventory = Inventory()
-        self.shop_inventory_ui = ShopInventoryUI(self.render, self.player_inventory)
-        self.accept('i', self.toggle_inventory)
+        self.shop_inventory_ui = ShopInventoryUI(self.base.render, self.player_inventory)
+        self.base.accept('i', self.toggle_inventory)
 
     def toggle_inventory(self):
         if self.shop_inventory_ui.frame.isHidden():
@@ -238,12 +428,12 @@ class DiceSimulator(ShowBase):
 
     # --- INPUT LOGIC ---
     def get_mouse_in_world(self):
-        if not self.mouseWatcherNode.hasMouse(): return None
-        mpos = self.mouseWatcherNode.getMouse()
+        if not self.base.mouseWatcherNode.hasMouse(): return None
+        mpos = self.base.mouseWatcherNode.getMouse()
         p_from = Point3(); p_to = Point3()
-        self.camLens.extrude(mpos, p_from, p_to)
-        p_from = self.render.getRelativePoint(self.cam, p_from)
-        p_to = self.render.getRelativePoint(self.cam, p_to)
+        self.base.camLens.extrude(mpos, p_from, p_to)
+        p_from = self.base.render.getRelativePoint(self.base.cam, p_from)
+        p_to = self.base.render.getRelativePoint(self.base.cam, p_to)
         intersection = Point3()
         if self.drag_plane.intersectsLine(intersection, p_from, p_to):
             return intersection
@@ -268,13 +458,14 @@ class DiceSimulator(ShowBase):
             body.setKinematic(False)
             body.setCollisionResponse(True)
             body.setActive(True)
+            print(f"[DEBUG] Threw die {i}: kinematic={body.isKinematic()}, gravity={self.world.getGravity()}")
             force = self.mouse_velocity * THROW_POWER
             spin = Vec3(random.uniform(-20,20), random.uniform(-20,20), random.uniform(-20,20))
             body.applyImpulse(force, Point3(0,0,0))
             body.applyTorqueImpulse(spin)
 
     def update(self, task):
-        dt = globalClock.getDt()
+        dt = getattr(task, 'dt', 0.016)  # Use task.dt if available, else default to ~60 FPS
         
         # --- DRAG LOGIC ---
         if self.holding_dice:
@@ -321,7 +512,7 @@ class DiceSimulator(ShowBase):
         body.setRestitution(BOUNCINESS)
         body.setAngularDamping(DAMPING_ANGULAR)
         body.setCcdMotionThreshold(1e-7); body.setCcdSweptSphereRadius(0.2)
-        np = self.render.attachNewNode(body)
+        np = self.base.render.attachNewNode(body)
         np.setPos(pos)
         self.world.attachRigidBody(body)
         self.build_visual_die(np)
@@ -332,7 +523,7 @@ class DiceSimulator(ShowBase):
         p_path = Filename.fromOsSpecific(path)
         if os.path.exists(path):
             try:
-                m = self.loader.loadModel(p_path)
+                m = self.base.loader.loadModel(p_path)
                 m.reparentTo(parent)
                 m.setScale(DICE_MODEL_SCALE) 
                 m.setTwoSided(True)
@@ -366,6 +557,7 @@ class DiceSimulator(ShowBase):
 
     # --- CREATE TABLE (WITH ALIGNMENT CONTROLS) ---
     def create_poker_table(self):
+        print("[DiceSimulator] create_poker_table called")
         # 1. Physics Floor (At Z=0)
         shape = BulletPlaneShape(Vec3(0, 0, 1), 0)
         node = BulletRigidBodyNode('Ground'); node.addShape(shape); node.setFriction(FRICTION_FELT)
@@ -380,14 +572,14 @@ class DiceSimulator(ShowBase):
             (Point3(0,0,WALL_HEIGHT),Vec3(TABLE_WIDTH_PHYSICS+5,TABLE_DEPTH_PHYSICS+5,1))
         ]:
             w = BulletRigidBodyNode('Wall'); w.addShape(BulletBoxShape(sz/2)); w.setRestitution(0.5)
-            self.world.attachRigidBody(w); self.render.attachNewNode(w).setPos(pos)
+            self.world.attachRigidBody(w); self.base.render.attachNewNode(w).setPos(pos)
 
         # 3. Visual Table Model
         path = os.path.join(SCRIPT_DIR, FOLDER_NAME, TABLE_FILE_NAME)
         if os.path.exists(path):
             try:
-                table_model = self.loader.loadModel(Filename.fromOsSpecific(path))
-                table_model.reparentTo(self.render)
+                table_model = self.base.loader.loadModel(Filename.fromOsSpecific(path))
+                table_model.reparentTo(self.base.render)
                 table_model.setScale(TABLE_MODEL_SCALE)
                 
                 # --- KEY FIX: OFFSET ---
@@ -401,7 +593,7 @@ class DiceSimulator(ShowBase):
         # Fallback
         print("Fallback to Procedural Table")
         cm = CardMaker('felt'); cm.setFrame(-TABLE_WIDTH_PHYSICS/2, TABLE_WIDTH_PHYSICS/2, -TABLE_DEPTH_PHYSICS/2, TABLE_DEPTH_PHYSICS/2) 
-        flr = self.render.attachNewNode(cm.generate()); flr.setP(-90); flr.setColor(0.1, 0.35, 0.15, 1) 
+        flr = self.base.render.attachNewNode(cm.generate()); flr.setP(-90); flr.setColor(0.1, 0.35, 0.15, 1) 
 
     def toggle_debug(self):
         if self.world.getDebugNode():
@@ -410,6 +602,3 @@ class DiceSimulator(ShowBase):
             dn = BulletDebugNode('Debug'); dn.showWireframe(True); dn.showConstraints(True)
             self.debugNP = self.render.attachNewNode(dn); self.debugNP.show(); self.world.setDebugNode(dn)
 
-if __name__ == "__main__":
-    app = DiceSimulator()
-    app.run()

@@ -9,7 +9,7 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
 if ROOT not in sys.path:
     sys.path.insert(0, ROOT)
 
-from cards import card
+## card.py removed; update or remove card references as needed
 # Note: do not import AudioManager at module import time because it imports pygame.
 AudioManager = None
 import os

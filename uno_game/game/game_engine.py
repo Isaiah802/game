@@ -2,7 +2,6 @@ import random
 from collections import Counter
 from audio.audio import AudioManager
 from ui.winner_page import *
-import pygame
 from .food_drink_methods import FoodDrinkMixin
 from items.consumables import registry, Effect
 
@@ -312,8 +311,14 @@ class GameManager(FoodDrinkMixin):
             winner_name=player,
             message="Master of Dice!"
         )
-        winner_screen.run(self.screen, audio_manager=audio)
-        pygame.time.delay(2000)
-        pygame.quit()
+        winner_screen.run(None, audio_manager=audio)
+        import time
+        time.sleep(2)
+        # To quit Panda3D, use base.userExit() if needed
+        from direct.showbase import ShowBase
+        try:
+            ShowBase.ShowBase().userExit()
+        except Exception:
+            pass
         raise SystemExit
 

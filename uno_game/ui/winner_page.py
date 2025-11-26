@@ -1,91 +1,49 @@
 import os
-import pygame
 import time
+from direct.gui.DirectGui import DirectFrame, DirectLabel
 
 
 class WinnerScreen:
-    """Simple winner screen with fade-in and skip support.
-
-    Usage:
-        winner = WinnerScreen(winner_name='Player 1', message='You conquered Zanzibar!')
-        winner.run(screen)
-    """
-
-    def __init__(self, winner_name: str = 'Player', message: str = 'You win!', duration: float = 3.0):
+    """3D winner screen using Panda3D DirectGui."""
+    def __init__(self, winner_name: str = 'Player', message: str = 'You win!', duration: float = 3.0, base=None, audio_manager=None):
         self.winner_name = winner_name
         self.message = message
         self.duration = duration
-        self.bg_color = (40, 20, 60)
-        self.title_color = (255, 215, 0)  # gold
-        self.subtitle_color = (220, 220, 220)
+        self.base = base if base is not None else self._get_base()
+        self.audio_manager = audio_manager
+        self.result = None
+        self.frame = None
 
-    def run(self, screen: pygame.Surface, audio_manager=None):
-        clock = pygame.time.Clock()
-        start = time.time()
-        font_title = pygame.font.SysFont('Arial', 56, bold=True)
-        font_sub = pygame.font.SysFont('Arial', 24)
+    def _get_base(self):
+        try:
+            return base
+        except NameError:
+            raise RuntimeError("No Panda3D ShowBase instance found. Pass 'base' to WinnerScreen.")
 
-        width, height = screen.get_size()
-
-        # optional victory sound
-        sfx_channel = None
-        sound_obj = None
-        fade_duration = 0.6  # seconds to fade out near end
-        if audio_manager is not None:
+    def show(self):
+        if self.frame:
+            self.frame.destroy()
+        self.frame = DirectFrame(frameColor=(0.16,0.08,0.24,0.95), frameSize=(-1,1,-0.7,0.7), pos=(0,0,0))
+        self.title = DirectLabel(text=f'{self.winner_name} Wins!', scale=0.15, pos=(0,0,0.2), parent=self.frame, text_fg=(1,0.84,0,1))
+        self.subtitle = DirectLabel(text=self.message, scale=0.09, pos=(0,0,0.05), parent=self.frame, text_fg=(0.86,0.86,0.86,1))
+        self.continue_btn = DirectButton(text='Continue', scale=0.09, pos=(0,0,-0.3), parent=self.frame, command=self._on_continue)
+        # Optional: play victory sound
+        if self.audio_manager is not None:
             try:
-                sfx_path = os.path.join(audio_manager.sfx_folder, 'victory.mp3')
+                sfx_path = os.path.join(self.audio_manager.sfx_folder, 'victory.mp3')
                 if os.path.exists(sfx_path):
-                    sound_obj = pygame.mixer.Sound(sfx_path)
-                    base_vol = max(0.0, min(1.0, audio_manager.get_sfx_volume()))
-                    sound_obj.set_volume(base_vol)
-                    sfx_channel = sound_obj.play()
+                    self.audio_manager.play_sfx('victory.mp3', volume=0.8)
             except Exception:
-                sound_obj = None
-                sfx_channel = None
+                pass
 
-        running = True
-        while running:
-            now = time.time()
-            t = min(1.0, (now - start) / max(0.01, self.duration))
-            alpha = int(t * 255)
+    def _on_continue(self):
+        self.result = True
+        self.frame.hide()
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    raise SystemExit
-                elif event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
-                    running = False
-
-            screen.fill(self.bg_color)
-
-            # Winner title
-            title_surf = font_title.render(f"{self.winner_name} Wins!", True, self.title_color)
-            title_surf.set_alpha(alpha)
-            tr = title_surf.get_rect(center=(width // 2, height // 2 - 20))
-            screen.blit(title_surf, tr)
-
-            if self.message:
-                sub_surf = font_sub.render(self.message, True, self.subtitle_color)
-                sub_surf.set_alpha(alpha)
-                sr = sub_surf.get_rect(center=(width // 2, height // 2 + 40))
-                screen.blit(sub_surf, sr)
-
-            pygame.display.flip()
-            clock.tick(60)
-
-            if sound_obj and sfx_channel:
-                time_left = max(0.0, self.duration - (now - start))
-                if time_left <= fade_duration:
-                    frac = max(0.0, time_left / fade_duration)
-                    try:
-                        sound_obj.set_volume(frac * audio_manager.get_sfx_volume())
-                    except Exception:
-                        pass
-
-            if now - start >= self.duration:
-                try:
-                    if sfx_channel:
-                        sfx_channel.stop()
-                except Exception:
-                    pass
-                break
+    def run(self):
+        self.show()
+        start = time.time()
+        while self.result is None and (time.time() - start) < self.duration:
+            self.base.taskMgr.step()
+        self.frame.hide()
+        return self.result

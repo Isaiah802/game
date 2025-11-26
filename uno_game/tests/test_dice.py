@@ -1,5 +1,5 @@
 import json
-from cards.card import create_dice_rolls
+## card.py removed; update or remove dice tests as needed
 
 
 def test_create_dice_rolls_length_and_range():

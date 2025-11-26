@@ -1,123 +1,66 @@
-import os
-import threading
-import math
-import pygame
-import time
-
+from direct.gui.DirectGui import DirectFrame, DirectLabel, DirectButton
+from direct.interval.IntervalGlobal import LerpColorScaleInterval
+from panda3d.core import OnscreenImage, TransparencyAttrib
+import time, os
 
 class IntroScreen:
-    """Simple intro/splash screen with fade-in and skip support.
-
-    Usage:
-        intro = IntroScreen(title='Zanzibar Get Ready for Battle', subtitle='A Dice Game by I paid $1,152.60 to have this team name', duration=3.0)
-        intro.run(screen)
-    """
-
-    def __init__(self, title: str = 'Game', subtitle: str = '', duration: float = 2.5, **kwargs):
+    """Panda3D-based intro/splash screen with fade-in, background, and tips."""
+    def __init__(self, base, title='Zanzibar', subtitle='', duration=2.5, tips=None):
+        self.base = base
         self.title = title
         self.subtitle = subtitle
         self.duration = duration
-        
-        # Casino-themed color scheme
-        self.bg_color = kwargs.get('bg_color', (20, 20, 30))  # Deep blue-black
-        self.gradient_top = kwargs.get('gradient_top', (20, 20, 30, 160))  # Subtle dark gradient
-        self.gradient_bottom = kwargs.get('gradient_bottom', (10, 10, 15, 220))  # Deeper gradient bottom
-        self.title_color = kwargs.get('title_color', (255, 215, 0))  # Gold color for title
-        self.subtitle_color = kwargs.get('subtitle_color', (220, 220, 240))  # Soft white with blue tint
-        self.accent_color = kwargs.get('accent_color', (200, 20, 20))  # Deep red accent
-        self.progress_color = kwargs.get('progress_color', (200, 20, 20, 180))  # Semi-transparent red
-        
-        # Animation settings
-        self.title_glow_speed = kwargs.get('title_glow_speed', 2.0)
-        self.title_glow_intensity = kwargs.get('title_glow_intensity', 0.3)
-        self.subtitle_fade_speed = kwargs.get('subtitle_fade_speed', 1.5)
-        self.progress_glow_speed = kwargs.get('progress_glow_speed', 3.0)
-        self.gradient_opacity = kwargs.get('gradient_opacity', 150)  # 0-255
-        
-        # Font settings
-        self.title_font_name = kwargs.get('title_font_name', 'Arial')
-        self.title_font_size = kwargs.get('title_font_size', 56)
-        self.subtitle_font_size = kwargs.get('subtitle_font_size', 20)
-        self.tip_font_size = kwargs.get('tip_font_size', 16)
-        
-        # Skip settings
-        self.skippable = kwargs.get('skippable', True)
-        self.min_display_time = kwargs.get('min_display_time', 0.25)
-        self.tip_list = [
+        self.tips = tips or [
             "Tip: Press F to toggle fullscreen",
             "Tip: Press Space to roll dice",
             "Tip: You can change music in Change Song",
             "Tip: Add at least 2 players to start",
             "Tip: Press Esc to open the menu",
         ]
-        # Set the casino background image
         self.bg_image_path = os.path.join(os.path.dirname(__file__), '..', 'assets', 'ui', 'casino_background.jpg')
 
-    def run(self, screen: pygame.Surface, audio_manager=None, load_work=None):
-        """
-        Runs the enhanced intro screen.
+    def run(self):
+        # Fade-in effect
+        self.base.render.setColorScale(0, 0, 0, 1)
+        fade_in = LerpColorScaleInterval(self.base.render, 1.2, (1, 1, 1, 1))
+        fade_in.start()
 
-        - audio_manager: optional AudioManager instance for SFX/music control
-        - load_work: optional callable(progress_cb) used to load assets; should call progress_cb(0.0..1.0) as it progresses.
-          If provided, loading runs in a background thread and the progress bar reflects it.
-        """
-        clock = pygame.time.Clock()
-        start = time.time()
-        font_title = pygame.font.SysFont('Arial', 56)
-        font_sub = pygame.font.SysFont('Arial', 20)
-        font_small = pygame.font.SysFont('Arial', 16)
+        # Show background image
+        bg_img = None
+        if os.path.exists(self.bg_image_path):
+            bg_img = OnscreenImage(image=self.bg_image_path, pos=(0, 0, 0), scale=(1.78, 1, 1), parent=self.base.render2d)
+            bg_img.setTransparency(TransparencyAttrib.MAlpha)
 
-        width, height = screen.get_size()
+        # Title and subtitle
+        title_lbl = DirectLabel(text=self.title, scale=0.13, pos=(0, 0, 0.55), text_fg=(1, 0.85, 0.2, 1), frameColor=(0,0,0,0), parent=self.base.aspect2d)
+        subtitle_lbl = DirectLabel(text=self.subtitle, scale=0.07, pos=(0, 0, 0.42), text_fg=(0.95, 0.95, 1, 1), frameColor=(0,0,0,0), parent=self.base.aspect2d)
 
-        # optional background image
-        bg_image = None
-        if self.bg_image_path and os.path.exists(self.bg_image_path):
-            try:
-                bg_image = pygame.image.load(self.bg_image_path)
-                bg_image = pygame.transform.smoothscale(bg_image, (width, height))
-            except Exception:
-                bg_image = None
+        # Tip label
+        tip_lbl = DirectLabel(text=self.tips[0], scale=0.05, pos=(0, 0, -0.7), text_fg=(0.9, 0.3, 0.3, 1), frameColor=(0,0,0,0), parent=self.base.aspect2d)
 
-        # sound setup (play once)
-        sfx_channel = None
-        sound_obj = None
-        fade_duration = 0.6
-        if audio_manager is not None:
-            try:
-                sfx_path = os.path.join(audio_manager.sfx_folder, 'whoosh.mp3')
-                if os.path.exists(sfx_path):
-                    sound_obj = pygame.mixer.Sound(sfx_path)
-                    base_vol = max(0.0, min(1.0, audio_manager.get_sfx_volume()))
-                    sound_obj.set_volume(base_vol)
-                    sfx_channel = sound_obj.play()
-            except Exception:
-                sound_obj = None
-                sfx_channel = None
+        # Skip button (appears after min time)
+        skip_btn = None
+        min_time = 1.0
+        start_time = time.time()
+        while time.time() - start_time < self.duration:
+            elapsed = time.time() - start_time
+            # Show skip button after min_time
+            if skip_btn is None and elapsed > min_time:
+                skip_btn = DirectButton(text='Skip', scale=0.06, pos=(0.8, 0, -0.8), frameColor=(0.2,0.2,0.3,1), text_fg=(0.95,0.95,0.95,1), parent=self.base.aspect2d, command=self._skip)
+            self.base.taskMgr.step()
+            # Cycle tips
+            tip_lbl['text'] = self.tips[int((elapsed*1.5)%len(self.tips))]
+            if hasattr(self, '_skipped') and self._skipped:
+                break
+        # Cleanup
+        if bg_img: bg_img.removeNode()
+        title_lbl.destroy()
+        subtitle_lbl.destroy()
+        tip_lbl.destroy()
+        if skip_btn: skip_btn.destroy()
 
-        # loading state (shared with worker thread)
-        state = {'progress': 0.0, 'done': False, 'error': None}
-
-        def progress_cb(p):
-            try:
-                state['progress'] = max(0.0, min(1.0, float(p)))
-            except Exception:
-                state['progress'] = 0.0
-
-        # If a load_work callable is provided, run it in a background thread
-        if load_work is not None:
-            def worker():
-                try:
-                    load_work(progress_cb)
-                except Exception as e:
-                    state['error'] = str(e)
-                finally:
-                    state['done'] = True
-
-            t = threading.Thread(target=worker, daemon=True)
-            t.start()
-        else:
-            # no loader: treat duration as the loading time
-            def fake_loader(cb):
+    def _skip(self):
+        self._skipped = True
                 steps = max(10, int(self.duration * 10))
                 for i in range(steps):
                     time.sleep(max(0.01, self.duration / steps))
@@ -136,28 +79,7 @@ class IntroScreen:
             # progress fraction (prefer real loader progress when available)
             frac = state['progress']
 
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    pygame.quit()
-                    raise SystemExit
-                elif event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
-                    if not self.skippable:
-                        # Show a quick pulse animation but don't skip
-                        state['pulse_start'] = now
-                        continue
-                        
-                    # Add a quick fade out animation
-                    state['fade_out_start'] = now
-                    state['manual_skip'] = True
-                    
-                    # Play a sound effect for the skip action
-                    if audio_manager is not None:
-                        try:
-                            skip_sfx_path = os.path.join(audio_manager.sfx_folder, 'mouse-click-290204.mp3')
-                            if os.path.exists(skip_sfx_path):
-                                skip_sound = pygame.mixer.Sound(skip_sfx_path)
-                                skip_sound.set_volume(audio_manager.get_sfx_volume() * 0.7)
-                                skip_sound.play()
+            # Panda3D DirectGui input/callbacks will be handled here.
                         except Exception:
                             pass
 
@@ -201,6 +123,8 @@ class IntroScreen:
             if self.subtitle:
                 sub_alpha = int(255 * (abs(math.sin(time.time() * 1.5)) * 0.2 + 0.8))
                 sub_surf = font_sub.render(self.subtitle, True, self.subtitle_color)
+                    # TODO: Replace with Panda3D texture/OnscreenImage drawing
+                    pass
                 sub_surf.set_alpha(sub_alpha)
                 sr = sub_surf.get_rect(center=(width // 2, tr.bottom + 24))
                 screen.blit(sub_surf, sr)

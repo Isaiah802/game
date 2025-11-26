@@ -6,6 +6,10 @@ import threading
 
 # ---------------- Audio Manager ----------------
 class AudioManager:
+    def play_sfx(self, filename, volume=0.5):
+        """Alias for play_sound for UI compatibility."""
+        return self.play_sound(filename, volume)
+
     def __init__(self, audio_folder=None):
         """Initialize the AudioManager.
 

@@ -1,63 +1,61 @@
-import turtle
+import os
+import sys
+import os
+# Ensure uno_game directory itself is in sys.path for imports
+uno_game_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+if uno_game_dir not in sys.path:
+    sys.path.insert(0, uno_game_dir)
+from direct.gui.DirectGui import DirectButton, DirectFrame, DirectLabel, DirectScrolledList
+from items import registry, Inventory
 import random
-import typing
+import math
 
+from direct.showbase.ShowBase import ShowBase
+from panda3d.core import (
+    Vec3, Point3, LColor, Plane,
+    BitMask32, CardMaker, NodePath, 
+    Texture, PNMImage, TransparencyAttrib,
+    DirectionalLight, AmbientLight,
+    Material, AntialiasAttrib, TextNode,
+    Filename, loadPrcFileData, LineSegs
+)
+from panda3d.bullet import (
+    BulletWorld, BulletPlaneShape, 
+    BulletRigidBodyNode, BulletBoxShape, 
+    BulletDebugNode
+)
+from direct.gui.OnscreenText import OnscreenText
 
-def create_dice_rolls(num_dice: int) -> typing.List[typing.Dict]:
-    """Creates and returns a list of random dice rolls."""
-    rolls = []
-    for _ in range(num_dice):
-        value = random.randint(1, 6)
-        rolls.append({'value': value})
-    return rolls
+# --- CONFIGURATION ---
+loadPrcFileData('', 'load-file-type p3gltf')
 
+# --- 1. PHYSICS BOX DIMENSIONS (The Invisible Container) ---
+# Adjust these until the "Green Wireframe" box matches your table's play area
+TABLE_WIDTH_PHYSICS = 18.0   
+TABLE_DEPTH_PHYSICS = 12.0   
+WALL_HEIGHT = 15.0
 
-def draw_die(pen: turtle.Turtle, x: int, y: int, die: typing.Dict):
-    """
-    Draws a single game die at a specific location using a given turtle pen.
-    - pen: The turtle object to use for drawing.
-    - x, y: The bottom-left corner coordinates of the die.
-    - die: A dictionary like {'value': 5}.
-    """
-    die_size = 80
-    pip_radius = 8
+# --- 2. VISUAL TABLE ALIGNMENT (The 3D Model) ---
+# Use F1 to see the mismatch, then change these numbers.
+TABLE_MODEL_SCALE = 12     # Make the table bigger/smaller
+TABLE_VISUAL_Z = -6   # Move table UP (+) or DOWN (-) to match floor
 
-    # --- Draw the main square of the die ---
-    pen.penup()
-    pen.goto(x, y)
-    pen.pendown()
-    pen.color('black', 'white')  # Black outline, white fill
-    pen.begin_fill()
-    for _ in range(4):
-        pen.forward(die_size)
-        pen.left(90)
-    pen.end_fill()
-    pen.penup()
+# --- DICE CONFIG ---
+DIE_SIZE = 0.8          
+FRICTION_FELT = 0.9     
+BOUNCINESS = 0.5        
+DAMPING_ANGULAR = 0.5   
 
-    # --- Helper function to draw a single pip (dot) ---
-    def draw_pip(pip_x, pip_y):
-        pen.goto(pip_x, pip_y - pip_radius)  # Go to bottom of circle
-        pen.pendown()
-        pen.color('black', 'black')
-        pen.begin_fill()
-        pen.circle(pip_radius)
-        pen.end_fill()
-        pen.penup()
+# --- ASSETS ---
+FOLDER_NAME = "dice"
+DICE_FILE_NAME = "test3.glb" 
+TABLE_FILE_NAME = "poker-table.glb" 
+DICE_MODEL_SCALE = 10.0 
 
-    # --- Calculate pip positions based on the die's value ---
-    val = die.get('value')
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-    # Pre-calculate common coordinates based on die size
-    col_1 = x + die_size * 0.25
-    col_2 = x + die_size * 0.50
-    col_3 = x + die_size * 0.75
-    row_1 = y + die_size * 0.75
-    row_2 = y + die_size * 0.50
-    row_3 = y + die_size * 0.25
-
-    # Use a more efficient structure to draw pips shared by multiple values
-    if val in [1, 3, 5]:
-        draw_pip(col_2, row_2)  # Center pip
+# --- SCORING CALIBRATION ---
+DIE_AXIS_MAPPING = { "UP": 4, "DOWN": 3, "RIGHT": 2, "LEFT": 1, "FWD": 5, "BACK": 6 }
     if val in [2, 3, 4, 5, 6]:
         draw_pip(col_1, row_1)  # Top-left
         draw_pip(col_3, row_3)  # Bottom-right

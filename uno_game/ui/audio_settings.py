@@ -1,24 +1,11 @@
-import pygame
-from typing import Optional
-
+from direct.gui.DirectGui import DirectFrame, DirectLabel, DirectSlider, DirectButton
 
 class AudioSettingsMenu:
-    """Simple audio settings menu to adjust music and sfx volumes.
-
-    Usage:
-        menu = AudioSettingsMenu(screen, audio_manager)
-        menu.run()  # updates audio_manager in-place
-    """
-
-    def __init__(self, screen: pygame.Surface, audio_manager, width=800, height=600):
-        self.screen = screen
+    """3D audio settings menu using Panda3D DirectGui."""
+    def __init__(self, audio_manager, width=1.5, height=1.0, base=None):
         self.am = audio_manager
         self.width = width
         self.height = height
-        self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont('Arial', 24)
-        self.title_font = pygame.font.SysFont('Arial', 36, bold=True)
-        # volumes stored 0.0-1.0
         try:
             self.music_vol = float(self.am.get_music_volume())
         except Exception:
@@ -27,63 +14,67 @@ class AudioSettingsMenu:
             self.sfx_vol = float(self.am.get_sfx_volume())
         except Exception:
             self.sfx_vol = 1.0
+        self.result = None
+        self.base = base if base is not None else self._get_base()
+        self._build_ui()
 
-    def draw(self):
-        self.screen.fill((40, 30, 30))
-        title = self.title_font.render('Audio Settings', True, (255, 255, 255))
-        tr = title.get_rect(center=(self.width // 2, 60))
-        self.screen.blit(title, tr)
+    def _get_base(self):
+        try:
+            return base
+        except NameError:
+            raise RuntimeError("No Panda3D ShowBase instance found. Pass 'base' to AudioSettingsMenu.")
 
-        mv = self.font.render(f'Music Volume: {int(self.music_vol*100)}%', True, (255, 255, 255))
-        sv = self.font.render(f'SFX Volume: {int(self.sfx_vol*100)}%', True, (255, 255, 255))
-        self.screen.blit(mv, (80, 140))
-        self.screen.blit(sv, (80, 200))
+    def _build_ui(self):
+        self.frame = DirectFrame(frameColor=(0.15,0.12,0.12,0.95), frameSize=(-self.width/2,self.width/2,-self.height/2,self.height/2), pos=(0,0,0))
+        self.title = DirectLabel(text='Audio Settings', scale=0.12, pos=(0,0,self.height/2-0.18), parent=self.frame, text_fg=(1,1,1,1))
+        self.music_slider = DirectSlider(
+            range=(0,1), value=self.music_vol, pageSize=0.01,
+            pos=(-0.4,0,0.15), scale=0.6, parent=self.frame,
+            command=self._on_music_change
+        )
+        self.music_label = DirectLabel(text=f'Music Volume: {int(self.music_vol*100)}%', scale=0.08, pos=(0.3,0,0.15), parent=self.frame, text_fg=(1,1,1,1))
+        self.sfx_slider = DirectSlider(
+            range=(0,1), value=self.sfx_vol, pageSize=0.01,
+            pos=(-0.4,0,-0.15), scale=0.6, parent=self.frame,
+            command=self._on_sfx_change
+        )
+        self.sfx_label = DirectLabel(text=f'SFX Volume: {int(self.sfx_vol*100)}%', scale=0.08, pos=(0.3,0,-0.15), parent=self.frame, text_fg=(1,1,1,1))
+        self.save_btn = DirectButton(text='Save', scale=0.09, pos=(-0.2,0,-self.height/2+0.18), parent=self.frame, command=self._on_save)
+        self.cancel_btn = DirectButton(text='Cancel', scale=0.09, pos=(0.2,0,-self.height/2+0.18), parent=self.frame, command=self._on_cancel)
 
-        instr = self.font.render('Use Left/Right to change Music, A/D to change SFX. Enter to save, Esc to cancel', True, (200, 200, 200))
-        ir = instr.get_rect(center=(self.width // 2, self.height - 40))
-        self.screen.blit(instr, ir)
+    def _on_music_change(self):
+        self.music_vol = self.music_slider['value']
+        self.music_label['text'] = f'Music Volume: {int(self.music_vol*100)}%'
+        try:
+            self.am.set_music_volume(self.music_vol)
+        except Exception:
+            pass
 
-        pygame.display.flip()
+    def _on_sfx_change(self):
+        self.sfx_vol = self.sfx_slider['value']
+        self.sfx_label['text'] = f'SFX Volume: {int(self.sfx_vol*100)}%'
+        try:
+            self.am.set_sfx_volume(self.sfx_vol)
+        except Exception:
+            pass
 
-    def run(self) -> Optional[dict]:
-        running = True
-        result = None
-        while running:
-            for event in pygame.event.get():
-                if event.type == pygame.QUIT:
-                    running = False
-                elif event.type == pygame.KEYDOWN:
-                    if event.key == pygame.K_LEFT:
-                        self.music_vol = max(0.0, self.music_vol - 0.05)
-                        try:
-                            self.am.set_music_volume(self.music_vol)
-                        except Exception:
-                            pass
-                    elif event.key == pygame.K_RIGHT:
-                        self.music_vol = min(1.0, self.music_vol + 0.05)
-                        try:
-                            self.am.set_music_volume(self.music_vol)
-                        except Exception:
-                            pass
-                    elif event.key == pygame.K_a:
-                        self.sfx_vol = max(0.0, self.sfx_vol - 0.05)
-                        try:
-                            self.am.set_sfx_volume(self.sfx_vol)
-                        except Exception:
-                            pass
-                    elif event.key == pygame.K_d:
-                        self.sfx_vol = min(1.0, self.sfx_vol + 0.05)
-                        try:
-                            self.am.set_sfx_volume(self.sfx_vol)
-                        except Exception:
-                            pass
-                    elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
-                        # save and exit
-                        result = {'music_volume': self.music_vol, 'sfx_volume': self.sfx_vol}
-                        running = False
-                    elif event.key == pygame.K_ESCAPE:
-                        running = False
-            self.draw()
-            self.clock.tick(60)
+    def _on_save(self):
+        self.result = {
+            'music_volume': self.music_vol,
+            'sfx_volume': self.sfx_vol
+        }
+        self.frame.hide()
 
-        return result
+    def _on_cancel(self):
+        self.result = None
+        self.frame.hide()
+
+    def show(self):
+        self.frame.show()
+        self.result = None
+
+    def run(self):
+        self.show()
+        while self.result is None:
+            self.base.taskMgr.step()
+        return self.result

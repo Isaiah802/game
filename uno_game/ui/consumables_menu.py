@@ -1,128 +1,73 @@
 """
 UI for displaying and managing food and drinks.
 """
-import os
-import pygame
-from typing import Optional, List, Tuple, Callable
+from direct.gui.DirectGui import DirectFrame, DirectLabel, DirectButton, DirectScrolledList
+from direct.showbase.ShowBase import ShowBase
+from typing import Optional, List
 from items import ConsumableItem, Inventory, ItemType
 
 class ConsumablesMenu:
-    """A menu for displaying and using food and drink items."""
-    
-    def __init__(self, screen: pygame.Surface, inventory: Inventory):
-        self.screen = screen
+    """3D menu for displaying and using food and drink items using Panda3D DirectGui."""
+    def __init__(self, inventory: Inventory, base=None):
         self.inventory = inventory
-        self.font = pygame.font.SysFont('Arial', 20)
-        self.small_font = pygame.font.SysFont('Arial', 16)
+        self.base = base if base is not None else self._get_base()
         self.selected_item: Optional[ConsumableItem] = None
         self.scroll_offset = 0
         self.max_items_shown = 4
-        
-        # Colors
-        self.bg_color = (20, 20, 30)  # Solid background
-        self.food_color = (200, 150, 50)    # Warm yellow for food
-        self.drink_color = (50, 150, 200)   # Cool blue for drinks
-        self.selected_color = (255, 255, 255)
-        self.text_color = (220, 220, 220)
-        
-        # Load icons (you can add these later)
-        self.food_icon = None
-        self.drink_icon = None
-        
-    def draw_item(self, item: ConsumableItem, pos: Tuple[int, int], selected: bool = False):
-        """Draw a single item in the menu."""
-        x, y = pos
-        width = 300
-        height = 80
-        
-        # Draw item background
-        color = self.food_color if item.item_type == ItemType.FOOD else self.drink_color
-        if selected:
-            pygame.draw.rect(self.screen, self.selected_color, (x-2, y-2, width+4, height+4))
-        pygame.draw.rect(self.screen, color, (x, y, width, height))
-        
-        # Draw item name
-        name_surf = self.font.render(item.name, True, self.text_color)
-        self.screen.blit(name_surf, (x + 10, y + 5))
-        
-        # Draw quantity
-        quantity = self.inventory.get_item_quantity(item.name)
-        quantity_surf = self.font.render(f"x{quantity}", True, self.text_color)
-        self.screen.blit(quantity_surf, (x + width - 40, y + 5))
-        
-        # Draw description (wrapped)
-        words = item.description.split()
-        line = []
-        y_offset = 30
-        for word in words:
-            line.append(word)
-            text = ' '.join(line)
-            if self.small_font.size(text)[0] > width - 20:
-                line.pop()
-                text = ' '.join(line)
-                text_surf = self.small_font.render(text, True, self.text_color)
-                self.screen.blit(text_surf, (x + 10, y + y_offset))
-                line = [word]
-                y_offset += 20
-        if line:
-            text = ' '.join(line)
-            text_surf = self.small_font.render(text, True, self.text_color)
-            self.screen.blit(text_surf, (x + 10, y + y_offset))
-    
-    def draw(self, items: List[ConsumableItem]):
-        """Draw the consumables menu."""
-        width = 650
-        height = 500
-        x = (self.screen.get_width() - width) // 2
-        y = (self.screen.get_height() - height) // 2
-        
-        # Solid background
-        pygame.draw.rect(self.screen, self.bg_color, (x, y, width, height))
-        pygame.draw.rect(self.screen, (100, 100, 120), (x, y, width, height), 3)  # Border
-        
-        # Draw title
-        title_surf = self.font.render("Food & Drinks Inventory", True, self.text_color)
-        self.screen.blit(title_surf, (x + (width - title_surf.get_width()) // 2, y + 15))
-        
-        # Instructions
-        inst_surf = self.small_font.render("Arrow keys: Navigate | ENTER: Use item | ESC: Close", True, self.text_color)
-        self.screen.blit(inst_surf, (x + (width - inst_surf.get_width()) // 2, y + 45))
-        
-        # Draw items
-        item_y = y + 80
-        for i, item in enumerate(items[self.scroll_offset:self.scroll_offset + self.max_items_shown]):
-            self.draw_item(item, (x + 10, item_y), item == self.selected_item)
-            item_y += 90
-        
-        # Draw scroll indicators if needed
-        if self.scroll_offset > 0:
-            pygame.draw.polygon(self.screen, self.text_color, 
-                             [(x + width//2, y + 70), (x + width//2-10, y + 60), (x + width//2+10, y + 60)])
-        if self.scroll_offset + self.max_items_shown < len(items):
-            pygame.draw.polygon(self.screen, self.text_color, 
-                             [(x + width//2, y + height-20), (x + width//2-10, y + height-30), (x + width//2+10, y + height-30)])
-    
-    def handle_event(self, event: pygame.event.Event, items: List[ConsumableItem]) -> Optional[ConsumableItem]:
-        """Handle input events. Returns the item to use if one was selected."""
-        if event.type == pygame.KEYDOWN:
-            current_index = items.index(self.selected_item) if self.selected_item else 0
-            
-            if event.key == pygame.K_UP:
-                current_index = max(0, current_index - 1)
-                self.selected_item = items[current_index]
-                if current_index < self.scroll_offset:
-                    self.scroll_offset = current_index
-            
-            elif event.key == pygame.K_DOWN:
-                current_index = min(len(items) - 1, current_index + 1)
-                self.selected_item = items[current_index]
-                if current_index >= self.scroll_offset + self.max_items_shown:
-                    self.scroll_offset = current_index - self.max_items_shown + 1
-            
-            elif event.key == pygame.K_RETURN and self.selected_item:
-                return self.selected_item
-            
-            elif event.key == pygame.K_ESCAPE:
-                return None
-        
-        return None
+        self.result = None
+        self._build_ui()
+
+    def _get_base(self):
+        try:
+            return base
+        except NameError:
+            raise RuntimeError("No Panda3D ShowBase instance found. Pass 'base' to ConsumablesMenu.")
+
+    def _build_ui(self):
+        self.frame = DirectFrame(frameColor=(0.08,0.08,0.15,0.95), frameSize=(-1,1,-0.7,0.7), pos=(0,0,0))
+        self.title = DirectLabel(text='Food & Drinks Inventory', scale=0.11, pos=(0,0,0.55), parent=self.frame, text_fg=(1,1,1,1))
+        self.instructions = DirectLabel(text='Select an item and press Use', scale=0.07, pos=(0,0,0.45), parent=self.frame, text_fg=(0.9,0.9,0.9,1))
+        self.item_list = DirectScrolledList(
+            decButton_pos=(0.8, 0, 0.2),
+            incButton_pos=(0.8, 0, -0.2),
+            frameSize=(-0.75, 0.75, -0.3, 0.3),
+            pos=(0,0,0.1),
+            parent=self.frame,
+            itemFrame_frameSize=(-0.7, 0.7, -0.25, 0.25),
+            itemFrame_pos=(0,0,0),
+            items=self._get_item_entries(),
+            numItemsVisible=self.max_items_shown,
+            forceHeight=0.09,
+            itemText_scale=0.09
+        )
+        self.use_btn = DirectButton(text='Use', scale=0.08, pos=(-0.3,0,-0.45), parent=self.frame, command=self._on_use)
+        self.close_btn = DirectButton(text='Close', scale=0.08, pos=(0.3,0,-0.45), parent=self.frame, command=self._on_close)
+
+    def _get_item_entries(self):
+        items = []
+        for item in self.inventory.get_all_items():
+            quantity = self.inventory.get_item_quantity(item.name)
+            items.append(f"{item.name} x{quantity}: {item.description}")
+        return items
+
+    def _on_use(self):
+        idx = self.item_list.getSelectedIndex()
+        items = self.inventory.get_all_items()
+        if 0 <= idx < len(items):
+            self.selected_item = items[idx]
+            self.result = self.selected_item
+            self.frame.hide()
+
+    def _on_close(self):
+        self.result = None
+        self.frame.hide()
+
+    def show(self):
+        self.frame.show()
+        self.result = None
+
+    def run(self):
+        self.show()
+        while self.result is None:
+            self.base.taskMgr.step()
+        return self.result
