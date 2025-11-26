@@ -38,6 +38,9 @@ BASE_DIR = os.path.dirname(__file__)
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 SETTINGS_PATH = os.path.join(BASE_DIR, 'settings.json')
 
+# Cache for pre-rendered die sprites: {(size, face): Surface}
+DIE_SPRITE_CACHE = {}
+
 # Attempt to import the achievement notifier. If running with a different
 # cwd or from the package root, ensure the package path is available.
 try:
@@ -84,34 +87,145 @@ def save_settings(data: dict):
         pass
 
 
+def _render_die_sprite(size: int, face: int) -> pygame.Surface:
+    key = (size, face)
+    if key in DIE_SPRITE_CACHE:
+        return DIE_SPRITE_CACHE[key]
+
+    surf = pygame.Surface((size, size), pygame.SRCALPHA)
+    rect = pygame.Rect(0, 0, size, size)
+    border_radius = max(4, size // 8)
+
+    # shadow
+    shadow = pygame.Surface((size, size), pygame.SRCALPHA)
+    pygame.draw.ellipse(shadow, (0, 0, 0, 48), (size*0.08, size*0.7, size*0.84, size*0.24))
+    surf.blit(shadow, (0, 0))
+
+    # base face with subtle bevel (drawn as two layered rects)
+    base_col = (245, 245, 245)
+    inner_col = (228, 228, 232)
+    pygame.draw.rect(surf, base_col, rect, border_radius=border_radius)
+    inner = rect.inflate(-size*0.08, -size*0.08)
+    pygame.draw.rect(surf, inner_col, inner, border_radius=max(2, border_radius-2))
+
+    # top-left highlight
+    hl = pygame.Surface((size, size), pygame.SRCALPHA)
+    pygame.draw.rect(hl, (255, 255, 255, 36), (0, 0, size, size//2), border_radius=border_radius)
+    surf.blit(hl, (0, 0))
+
+    # pip helper with slight rim
+    def pip(cx, cy, r):
+        # shadow rim
+        pygame.draw.circle(surf, (20, 20, 20, 120), (int(cx+1), int(cy+1)), r)
+        pygame.draw.circle(surf, (8, 8, 8), (int(cx), int(cy)), r-1)
+        # small glossy spot
+        if r >= 4:
+            pygame.draw.circle(surf, (255, 255, 255, 40), (int(cx - r*0.3), int(cy - r*0.3)), max(1, r//3))
+
+    # pip layout relative to rect
+    col_1 = size * 0.22
+    col_2 = size * 0.5
+    col_3 = size * 0.78
+    row_1 = size * 0.22
+    row_2 = size * 0.5
+    row_3 = size * 0.78
+    r = max(2, size // 10)
+
+    if face in (1, 3, 5):
+        pip(col_2, row_2, r)
+    if face in (2, 3, 4, 5, 6):
+        pip(col_1, row_1, r)
+        pip(col_3, row_3, r)
+    if face in (4, 5, 6):
+        pip(col_3, row_1, r)
+        pip(col_1, row_3, r)
+    if face == 6:
+        pip(col_1, row_2, r)
+        pip(col_3, row_2, r)
+
+    # subtle border
+    pygame.draw.rect(surf, (30, 30, 30), rect, 1, border_radius=border_radius)
+
+    DIE_SPRITE_CACHE[key] = surf
+    return surf
+
+
 def draw_die(surface: pygame.Surface, x: int, y: int, size: int, value: int):
-    # Draw white rectangle with black border
-    rect = pygame.Rect(x, y, size, size)
-    pygame.draw.rect(surface, (255, 255, 255), rect)
-    pygame.draw.rect(surface, (0, 0, 0), rect, 2)
+    # Use pre-rendered sprite if available; otherwise generate on-the-fly
+    try:
+        spr = _render_die_sprite(size, value)
+        surface.blit(spr, (int(x), int(y)))
+    except Exception:
+        # fallback simple draw
+        rect = pygame.Rect(x, y, size, size)
+        pygame.draw.rect(surface, (255, 255, 255), rect)
+        pygame.draw.rect(surface, (0, 0, 0), rect, 2)
+        # simple pips
+        def pip(cx, cy):
+            pygame.draw.circle(surface, (0, 0, 0), (int(cx), int(cy)), size // 10)
+        col_1 = x + size * 0.25
+        col_2 = x + size * 0.5
+        col_3 = x + size * 0.75
+        row_1 = y + size * 0.25
+        row_2 = y + size * 0.5
+        row_3 = y + size * 0.75
+        if value in (1, 3, 5):
+            pip(col_2, row_2)
+        if value in (2, 3, 4, 5, 6):
+            pip(col_1, row_1)
+            pip(col_3, row_3)
+        if value in (4, 5, 6):
+            pip(col_3, row_1)
+            pip(col_1, row_3)
+        if value == 6:
+            pip(col_1, row_2)
+            pip(col_3, row_2)
 
-    # pip positions
-    def pip(cx, cy):
-        pygame.draw.circle(surface, (0, 0, 0), (int(cx), int(cy)), size // 10)
 
-    col_1 = x + size * 0.25
-    col_2 = x + size * 0.5
-    col_3 = x + size * 0.75
-    row_1 = y + size * 0.25
-    row_2 = y + size * 0.5
-    row_3 = y + size * 0.75
+def draw_die_flipping(surface: pygame.Surface, x: int, y: int, size: int, from_val: int, to_val: int, progress: float):
+    """Draw a die flipping from `from_val` to `to_val` where progress is 0..1.
 
-    if value in (1, 3, 5):
-        pip(col_2, row_2)
-    if value in (2, 3, 4, 5, 6):
-        pip(col_1, row_1)
-        pip(col_3, row_3)
-    if value in (4, 5, 6):
-        pip(col_3, row_1)
-        pip(col_1, row_3)
-    if value == 6:
-        pip(col_1, row_2)
-        pip(col_3, row_2)
+    The flip uses an X-scale shrink to mid-point and swaps face at 0.5.
+    """
+    # clamp and ease
+    p = max(0.0, min(1.0, progress))
+    def ease(t):
+        return 3*t*t - 2*t*t*t
+    pe = ease(p)
+
+    # decide which face to display; swap to target at midpoint for a flip effect
+    if pe < 0.5:
+        face = from_val if from_val else random.randint(1, 6)
+    else:
+        face = to_val if to_val else random.randint(1, 6)
+
+    # compute horizontal squash (width scales down toward 0 at mid-flip)
+    if pe < 0.5:
+        scale_x = 1.0 - (pe / 0.5)
+    else:
+        scale_x = (pe - 0.5) / 0.5
+
+    w = max(6, int(size * scale_x))
+    cx = x + (size - w) // 2
+
+    try:
+        # get the face sprite and scale horizontally to simulate flip
+        spr = _render_die_sprite(size, face)
+        # when squashed to very small width, scale to at least 1 pixel to avoid errors
+        scaled = pygame.transform.smoothscale(spr, (max(1, w), size))
+        surface.blit(scaled, (cx, y))
+        # draw subtle border when visible
+        if w > 4:
+            pygame.draw.rect(surface, (30, 30, 30), pygame.Rect(cx, y, w, size), 1)
+    except Exception:
+        # fallback: draw a simple scaled rect
+        if w > 2:
+            rect = pygame.Rect(cx, y, w, size)
+            pygame.draw.rect(surface, (245, 245, 245), rect)
+            pygame.draw.rect(surface, (0, 0, 0), rect, 1)
+        else:
+            # tiny mid-flip line to hint at motion
+            pygame.draw.line(surface, (0,0,0), (x+size//2, y), (x+size//2, y+size), 2)
 
 
 def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 10):
@@ -122,6 +236,7 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
 
     # try to play a roll sfx when rolling
     sfx_name = 'mouse-click-290204.mp3'  # included asset
+    # (background renderer removed - using flat fill to match previous behavior)
 
     while running:
         for event in pygame.event.get():
@@ -130,12 +245,66 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
                 sys.exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_r:
-                    rolls = create_dice_rolls(num_dice)
-                    # play sfx if available
+                    # Start a short roll animation, then set final rolls
+                    final_rolls = create_dice_rolls(num_dice)
                     try:
                         audio.play_sound_effect(sfx_name, volume=0.8)
                     except Exception:
                         pass
+
+                    anim_start = pygame.time.get_ticks()
+                    anim_duration = 700  # ms
+                    anim_running = True
+                    # sample a 'from' face per die (current value or random)
+                    from_faces = [d.get('value', random.randint(1,6)) for d in rolls]
+
+                    while anim_running:
+                        now = pygame.time.get_ticks()
+                        elapsed = now - anim_start
+                        progress = min(1.0, elapsed / anim_duration)
+
+                        for ev in pygame.event.get():
+                            if ev.type == pygame.QUIT:
+                                pygame.quit()
+                                sys.exit()
+                            elif ev.type == pygame.KEYDOWN and ev.key == pygame.K_ESCAPE:
+                                anim_running = False
+
+                        # draw background (flat fill)
+                        screen.fill((30, 140, 40))
+
+                        # layout dice in two rows of up to 5
+                        die_size = 80
+                        die_spacing = 100
+                        total_width = 5 * die_size + 4 * (die_spacing - die_size)
+                        start_x = (screen.get_width() - total_width) // 2
+                        top_y = 100
+                        bottom_y = 220
+
+                        for i, d in enumerate(final_rolls):
+                            if i < 5:
+                                x = start_x + i * die_spacing
+                                y = top_y
+                            else:
+                                x = start_x + (i - 5) * die_spacing
+                                y = bottom_y
+                            # stagger per-die progress slightly for a nicer feel
+                            stagger = (i % 5) * 0.03
+                            p = min(1.0, max(0.0, (progress - stagger) / (1.0 - stagger)))
+                            draw_die_flipping(screen, x, y, die_size, from_faces[i], d.get('value', 0), p)
+
+                        font = pygame.font.SysFont('Arial', 20)
+                        txt = font.render(f"Rolling...", True, (255, 255, 255))
+                        screen.blit(txt, (20, 20))
+
+                        pygame.display.flip()
+                        pygame.time.delay(16)
+
+                        if progress >= 1.0:
+                            anim_running = False
+
+                    # commit final values after animation
+                    rolls = final_rolls
                 elif event.key == pygame.K_k:
                     # Demo achievement popup for testing (appears bottom-left)
                     try:
@@ -151,7 +320,8 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
                     running = False
 
         # draw background
-        screen.fill((30, 140, 40))
+            # draw background (flat fill)
+            screen.fill((30, 140, 40))
 
         # layout dice in two rows of up to 5
         die_size = 80
@@ -189,12 +359,14 @@ def player_setup(screen: pygame.Surface):
     """
     clock = pygame.time.Clock()
     font = pygame.font.SysFont('Arial', 20)
+
     input_text = ''
     players = []
     starting_chips = 20  # fixed per requirement
     # Styling & state
     felt_color = (12, 80, 34)
     vignette = _make_vignette(screen.get_width(), screen.get_height())
+    # (background renderer removed for player setup)
     # spotlight removed for cleaner look
     spotlight_center = [screen.get_width() // 2, 80]
     selected_idx: Optional[int] = None
@@ -452,8 +624,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     is_fullscreen = False
     round_message = None
     round_message_end = 0.0
-    animating = False
-    anim_end = 0.0
+    # no animation: show improved 3D dice immediately when a round is played
     anim_duration = 0.8
     
     # Track current player (for shop/inventory)
@@ -467,6 +638,10 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     status_display = StatusDisplay()
     
     while running:
+        # frame timing
+        ms = clock.tick(60)
+        dt = ms / 1000.0
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -496,7 +671,6 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                         )
                     except Exception:
                         pass
-                elif event.key == pygame.K_i:
                     # Open inventory menu
                     show_inventory = True
                 elif event.key == pygame.K_s:
@@ -506,20 +680,11 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                     # Switch current player
                     current_player_idx = (current_player_idx + 1) % len(player_names)
                 elif event.key == pygame.K_SPACE:
-                    # start dice roll animation; actual round runs after animation
-                    if not animating:
-                        animating = True
-                        anim_end = time.time() + anim_duration
-                        # play a roll sfx if available
-                        try:
-                            audio.play_sound_effect('dice_bounce.mp3', volume=0.8)
-                        except Exception:
-                            try:
-                                audio.play_sound_effect('whoosh.mp3', volume=0.6)
-                            except Exception:
-                                pass
-                    # play a round  
-                    gm.play_round()
+                    # Play a round immediately and show improved (3D) dice.
+                    try:
+                        gm.play_round()
+                    except Exception:
+                        pass
 
         # If the game manager signalled the game ended (winner found), exit the
         # engine loop so control returns to the Start Menu instead of quitting.
@@ -691,7 +856,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
             
             show_shop = False
 
-        # Draw the game state
+        # Draw the game state (flat fill)
         screen.fill((40, 40, 60))
         current_player = player_names[current_player_idx]
         header = font.render(f'Current Player: {current_player} | Space: Roll | I: Inventory | S: Shop | Tab: Switch Player | Esc: Menu', True, (255, 255, 255))
@@ -745,25 +910,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
   
             y += 50
 
-        # If animating, draw rolling dice animation in the center area
-        if animating:
-            # draw three animated dice near the header
-            anim_die_size = 48
-            cx = screen.get_width() // 2 - (anim_die_size * 3 + spacing_x * 2) // 2
-            for k in range(3):
-                face = random.randint(1, 6)
-                draw_die(screen, cx + k * (anim_die_size + spacing_x), 100, anim_die_size, face)
-            # check animation end
-            if time.time() >= anim_end:
-                animating = False
-                # run actual round now
-                gm.play_round()
-                # compute winner for display
-                scores = {player: GameManager._calculate_score(res.get('final_roll', [])) for player, res in gm.round_results.items()}
-                if scores:
-                    winner = max(scores, key=lambda p: scores[p]['score'])
-                    round_message = f"Round winner: {winner} - {scores[winner]['name']}"
-                    round_message_end = time.time() + 3.0
+        # No rolling animation: improvements to die visuals are shown directly
 
         # draw any queued achievement popups (non-blocking)
         try:

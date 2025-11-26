@@ -219,6 +219,8 @@ class StartMenu:
         self.felt_color = (12, 80, 34)
         self.title_text = "A simple Zanzibar Game"
 
+    # Buttons will be created in build_ui
+
         # Buttons will be created in build_ui
         self.buttons = []
         self.build_ui()

@@ -1,5 +1,6 @@
 import typing
 from typing import Dict, List
+import pygame
 try:
     from graphics.achivments import notifier
 except Exception:
