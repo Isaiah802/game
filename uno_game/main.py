@@ -729,17 +729,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                             is_fullscreen = False
                     except Exception:
                         pass
-                elif event.key == pygame.K_k:
-                    # Demo achievement popup for testing (appears bottom-left)
-                    try:
-                        notifier.show(
-                            "Demo Achievement",
-                            "This verifies popups appear bottom-left",
-                            image_path=os.path.join(ASSETS_DIR, 'ach_demo.png'),
-                            placement='bottom-left'
-                        )
-                    except Exception:
-                        pass
+                elif event.key == pygame.K_i:
                     # Open inventory menu
                     show_inventory = True
                 elif event.key == pygame.K_s:
