@@ -66,6 +66,8 @@ class IntroScreen:
         self.use_blank_background = kwargs.get('use_blank_background', False)
         # Optional: render a roulette table layout background similar to the reference
         self.use_roulette_table = kwargs.get('use_roulette_table', True)
+        # Optional: render a backgammon board background
+        self.use_backgammon_board = kwargs.get('use_backgammon_board', False)
 
     def run(self, screen: pygame.Surface, audio_manager=None, load_work=None):
         """
@@ -353,33 +355,8 @@ class IntroScreen:
         last_landing_played = False
 
         # --- Ambient particle ambience ---
+        # Particles disabled for cleaner look
         star_particles = []
-        if self.use_blank_background:
-            # No ambience on blank background
-            star_particles = []
-        elif casino_bg:
-            # warm floating glints for casino background
-            star_count = 60
-            for _ in range(star_count):
-                star_particles.append({
-                    'x': random.random() * width,
-                    'y': random.random() * height,
-                    'size': random.choice([2, 2, 3, 4]),
-                    'speed': random.uniform(6.0, 18.0),
-                    'drift': random.uniform(-8.0, 8.0),
-                    'alpha': random.randint(60, 180)
-                })
-        else:
-            star_count = 80
-            for _ in range(star_count):
-                star_particles.append({
-                    'x': random.random() * width,
-                    'y': random.random() * height,
-                    'size': random.choice([1, 1, 2]),
-                    'speed': random.uniform(6.0, 30.0),
-                    'drift': random.uniform(-6.0, 6.0),
-                    'alpha': random.randint(30, 110)
-                })
 
         # light sweep effect (used occasionally or on progress change)
         sweep_active = False
@@ -508,6 +485,70 @@ class IntroScreen:
             if self.use_blank_background:
                 # Plain fill; optionally use provided bg_color (defaults to deep blue-black)
                 screen.fill(self.bg_color)
+            elif self.use_backgammon_board:
+                # Draw a backgammon board layout similar to the provided image
+                # Outer background
+                screen.fill((60, 40, 20))
+                # Board frame (wooden border)
+                frame_margin = int(min(width, height) * 0.05)
+                board_x = frame_margin
+                board_y = frame_margin
+                board_w = width - frame_margin * 2
+                board_h = height - frame_margin * 2
+                # Draw wooden frame
+                frame_col = (139, 90, 43)
+                pygame.draw.rect(screen, frame_col, (board_x, board_y, board_w, board_h))
+                # Inner playing area
+                inner_margin = int(min(width, height) * 0.02)
+                inner_x = board_x + inner_margin
+                inner_y = board_y + inner_margin
+                inner_w = board_w - inner_margin * 2
+                inner_h = board_h - inner_margin * 2
+                # Two halves (left and right sides)
+                pygame.draw.rect(screen, (101, 67, 33), (inner_x, inner_y, inner_w, inner_h))
+                # Central bar divider
+                bar_w = int(inner_w * 0.08)
+                bar_x = inner_x + (inner_w - bar_w) // 2
+                pygame.draw.rect(screen, (80, 52, 26), (bar_x, inner_y, bar_w, inner_h))
+                # Draw triangular points (12 on each side, alternating colors)
+                point_w = int((inner_w - bar_w) / 12)
+                point_h = int(inner_h * 0.42)
+                light_point = (210, 180, 140)
+                dark_point = (90, 60, 30)
+                # Top row (right half, then left half)
+                for i in range(12):
+                    if i < 6:
+                        # Right half top
+                        px = bar_x + bar_w + i * point_w
+                    else:
+                        # Left half top
+                        px = inner_x + (i - 6) * point_w
+                    col = light_point if i % 2 == 0 else dark_point
+                    # Triangle pointing down
+                    pts = [
+                        (px, inner_y),
+                        (px + point_w, inner_y),
+                        (px + point_w // 2, inner_y + point_h)
+                    ]
+                    pygame.draw.polygon(screen, col, pts)
+                    pygame.draw.polygon(screen, (40, 30, 20), pts, 2)
+                # Bottom row (right half, then left half)
+                for i in range(12):
+                    if i < 6:
+                        # Right half bottom
+                        px = bar_x + bar_w + i * point_w
+                    else:
+                        # Left half bottom
+                        px = inner_x + (i - 6) * point_w
+                    col = dark_point if i % 2 == 0 else light_point
+                    # Triangle pointing up
+                    pts = [
+                        (px, inner_y + inner_h),
+                        (px + point_w, inner_y + inner_h),
+                        (px + point_w // 2, inner_y + inner_h - point_h)
+                    ]
+                    pygame.draw.polygon(screen, col, pts)
+                    pygame.draw.polygon(screen, (40, 30, 20), pts, 2)
             elif self.use_roulette_table:
                 # Draw a roulette table layout similar to the provided image
                 table_bg = (18, 90, 52)
@@ -1046,115 +1087,117 @@ class IntroScreen:
                     y2 = cy + math.sin(aa) * (wheel_radius + 1) * 0.94
                     pygame.draw.line(base_wheel_surf, (10, 10, 12), (int(x1), int(y1)), (int(x2), int(y2)), 2)
 
-            # rotate cached wheel surface by current wheel_angle (convert to degrees)
-            deg = -math.degrees(wheel_angle)  # negative to match rotation direction
-            rot = pygame.transform.rotozoom(base_wheel_surf, deg, 1.0)
-            rw, rh = rot.get_size()
-            wheel_pos = (spinner_center[0] - rw // 2, spinner_center[1] - rh // 2)
-            # draw multi-layer soft shadow for wheel to ground it on the felt (3D effect)
-            try:
-                ws = pygame.Surface((rw + 40, rh + 40), pygame.SRCALPHA)
-                # layered ellipses with decreasing alpha/size to simulate blur
-                for i, a in enumerate((100, 60, 28), start=0):
-                    rx = int((rw + 20) * (1.0 - i * 0.06))
-                    ry = int((rh + 12) * (1.0 - i * 0.12))
-                    cx_off = (ws.get_width() - rx) // 2
-                    cy_off = (ws.get_height() - ry) // 2
-                    pygame.draw.ellipse(ws, (0, 0, 0, a), (cx_off, cy_off, rx, ry))
-                screen.blit(ws, (wheel_pos[0] - 20, wheel_pos[1] + int(rh * 0.55)), special_flags=pygame.BLEND_RGBA_SUB)
-            except Exception:
-                pass
-            screen.blit(rot, wheel_pos)
-            # slight rim specular: draw a moving highlight that follows wheel rotation
-            try:
-                spec = pygame.Surface((rw, rh), pygame.SRCALPHA)
-                # pick a point on the rim based on wheel_angle
-                highlight_angle = -wheel_angle + 0.3
-                hr = int(wheel_radius * 0.6)
-                hx = rw // 2 + int(math.cos(highlight_angle) * hr)
-                hy = rh // 2 + int(math.sin(highlight_angle) * hr * 0.92)
-                # small radial gradient for specular
-                for s in range(8, 0, -1):
-                    alpha = int(18 * (s / 8.0))
-                    pygame.draw.circle(spec, (255, 255, 255, alpha), (hx, hy), s)
-                screen.blit(spec, wheel_pos, special_flags=pygame.BLEND_RGBA_ADD)
-            except Exception:
-                pass
-            # draw the ball: normally it orbits the rim, but when a target pocket
-            # is chosen we animate the ball migrating inward into that pocket
-            try:
-                orbit_radius = wheel_radius + ball_orbit_offset
-                ball_r = max(4, int(wheel_radius * 0.08))
-                if wheel_target_index is None and (not ball_migrating):
-                    # free orbiting ball (screen-space absolute angle stored in ball_angle)
-                    ball_angle += ball_speed * dt
-                    # small damping to slow orbital speed subtly
-                    ball_speed *= max(0.0, 1.0 - ball_damping * dt)
-                    bx = spinner_center[0] + math.cos(ball_angle) * orbit_radius
-                    by = spinner_center[1] + math.sin(ball_angle) * orbit_radius * 0.92
-                    pygame.draw.circle(screen, (10, 10, 10, 160), (int(bx)+2, int(by)+3), ball_r)
-                    pygame.draw.circle(screen, (245, 245, 245), (int(bx), int(by)), ball_r)
-                else:
-                    # we have a target or are migrating: compute migration progress
-                    mid_a = (wheel_target_index * seg_angle) + (seg_angle * 0.5) if wheel_target_index is not None else 0.0
-                    # final screen angle where the ball should rest when settled
-                    final_screen_angle = (mid_a + wheel_target_angle) if (wheel_target_angle is not None) else (mid_a + wheel_angle)
-                    # compute normalized settle progress (if available)
-                    if settle_start_time is not None and settle_duration > 0.0:
-                        t_set = (now - settle_start_time) / settle_duration
-                        t_clamped = max(0.0, min(1.0, t_set))
-                    else:
-                        t_clamped = 1.0 if wheel_result_settled else 0.0
-                    # ease for a pleasing inward motion
-                    t_e = 1.0 - pow(1.0 - t_clamped, 3)
-                    start_r = (ball_migrate_start_radius if ball_migrate_start_radius is not None else orbit_radius)
-                    end_r = max( max(8, int(wheel_radius * 0.75)), int(wheel_radius * 0.82) )
-                    curr_r = start_r + (end_r - start_r) * t_e
-                    start_a = (ball_migrate_start_angle if ball_migrate_start_angle is not None else ball_angle)
-                    # interpolate angle from start to final (wrap properly)
-                    diff = (final_screen_angle - start_a)
-                    # wrap difference to [-pi, pi]
-                    diff = (diff + math.pi) % (2 * math.pi) - math.pi
-                    curr_a = start_a + diff * t_e
-                    bx = spinner_center[0] + math.cos(curr_a) * curr_r
-                    by = spinner_center[1] + math.sin(curr_a) * curr_r * 0.92
-                    # small shadow and ball
-                    pygame.draw.circle(screen, (10, 10, 10, 160), (int(bx)+2, int(by)+3), ball_r)
-                    pygame.draw.circle(screen, (245, 245, 245), (int(bx), int(by)), ball_r)
-                    # if migration completed, snap final values and trigger bounce
-                    if t_clamped >= 1.0:
-                        try:
-                            ball_migrating = False
-                            ball_angle = final_screen_angle
-                            # set small bounce to imply settling
-                            ball_bounce_amp = 6.0
-                            ball_bounce_phase = 0.0
-                            # play a landing/bounce sound if available
-                            if (not last_landing_played) and audio_manager is not None and landing_sfx_name is not None:
-                                try:
-                                    audio_manager.play_sound_effect(landing_sfx_name, volume=0.9)
-                                except Exception:
-                                    pass
-                        except Exception:
-                            pass
-                # handle bounce after landing
-                if wheel_result_settled or (not ball_migrating and ball_bounce_amp > 0.01):
-                    # simple decaying vertical bounce mapped to y-position
-                    ball_bounce_phase += dt * 18.0
-                    bounce_y = math.fabs(math.sin(ball_bounce_phase)) * ball_bounce_amp
-                    # decay amplitude
-                    ball_bounce_amp *= ball_bounce_decay
-                    # apply bounce to last drawn ball by shifting a small amount upward
-                    # (we redraw shadow/ball above, so adjust by negative bounce)
-                    # to keep code simple we don't re-blit; instead a tiny highlight near the ball
-                    # Optionally, if more precision is desired we could store last bx,by and re-blit.
+            # Only render wheel for roulette table, not for backgammon board
+            if not self.use_backgammon_board:
+                # rotate cached wheel surface by current wheel_angle (convert to degrees)
+                deg = -math.degrees(wheel_angle)  # negative to match rotation direction
+                rot = pygame.transform.rotozoom(base_wheel_surf, deg, 1.0)
+                rw, rh = rot.get_size()
+                wheel_pos = (spinner_center[0] - rw // 2, spinner_center[1] - rh // 2)
+                # draw multi-layer soft shadow for wheel to ground it on the felt (3D effect)
+                try:
+                    ws = pygame.Surface((rw + 40, rh + 40), pygame.SRCALPHA)
+                    # layered ellipses with decreasing alpha/size to simulate blur
+                    for i, a in enumerate((100, 60, 28), start=0):
+                        rx = int((rw + 20) * (1.0 - i * 0.06))
+                        ry = int((rh + 12) * (1.0 - i * 0.12))
+                        cx_off = (ws.get_width() - rx) // 2
+                        cy_off = (ws.get_height() - ry) // 2
+                        pygame.draw.ellipse(ws, (0, 0, 0, a), (cx_off, cy_off, rx, ry))
+                    screen.blit(ws, (wheel_pos[0] - 20, wheel_pos[1] + int(rh * 0.55)), special_flags=pygame.BLEND_RGBA_SUB)
+                except Exception:
                     pass
-            except Exception:
-                pass
-            # draw center hub and rim onto rotated image instead (so they rotate with wheel)
-            # we added hub/rim/spokes to base_wheel_surf when caching; nothing more to draw here
+                screen.blit(rot, wheel_pos)
+                # slight rim specular: draw a moving highlight that follows wheel rotation
+                try:
+                    spec = pygame.Surface((rw, rh), pygame.SRCALPHA)
+                    # pick a point on the rim based on wheel_angle
+                    highlight_angle = -wheel_angle + 0.3
+                    hr = int(wheel_radius * 0.6)
+                    hx = rw // 2 + int(math.cos(highlight_angle) * hr)
+                    hy = rh // 2 + int(math.sin(highlight_angle) * hr * 0.92)
+                    # small radial gradient for specular
+                    for s in range(8, 0, -1):
+                        alpha = int(18 * (s / 8.0))
+                        pygame.draw.circle(spec, (255, 255, 255, alpha), (hx, hy), s)
+                    screen.blit(spec, wheel_pos, special_flags=pygame.BLEND_RGBA_ADD)
+                except Exception:
+                    pass
+                # draw the ball: normally it orbits the rim, but when a target pocket
+                # is chosen we animate the ball migrating inward into that pocket
+                try:
+                    orbit_radius = wheel_radius + ball_orbit_offset
+                    ball_r = max(4, int(wheel_radius * 0.08))
+                    if wheel_target_index is None and (not ball_migrating):
+                        # free orbiting ball (screen-space absolute angle stored in ball_angle)
+                        ball_angle += ball_speed * dt
+                        # small damping to slow orbital speed subtly
+                        ball_speed *= max(0.0, 1.0 - ball_damping * dt)
+                        bx = spinner_center[0] + math.cos(ball_angle) * orbit_radius
+                        by = spinner_center[1] + math.sin(ball_angle) * orbit_radius * 0.92
+                        pygame.draw.circle(screen, (10, 10, 10, 160), (int(bx)+2, int(by)+3), ball_r)
+                        pygame.draw.circle(screen, (245, 245, 245), (int(bx), int(by)), ball_r)
+                    else:
+                        # we have a target or are migrating: compute migration progress
+                        mid_a = (wheel_target_index * seg_angle) + (seg_angle * 0.5) if wheel_target_index is not None else 0.0
+                        # final screen angle where the ball should rest when settled
+                        final_screen_angle = (mid_a + wheel_target_angle) if (wheel_target_angle is not None) else (mid_a + wheel_angle)
+                        # compute normalized settle progress (if available)
+                        if settle_start_time is not None and settle_duration > 0.0:
+                            t_set = (now - settle_start_time) / settle_duration
+                            t_clamped = max(0.0, min(1.0, t_set))
+                        else:
+                            t_clamped = 1.0 if wheel_result_settled else 0.0
+                        # ease for a pleasing inward motion
+                        t_e = 1.0 - pow(1.0 - t_clamped, 3)
+                        start_r = (ball_migrate_start_radius if ball_migrate_start_radius is not None else orbit_radius)
+                        end_r = max( max(8, int(wheel_radius * 0.75)), int(wheel_radius * 0.82) )
+                        curr_r = start_r + (end_r - start_r) * t_e
+                        start_a = (ball_migrate_start_angle if ball_migrate_start_angle is not None else ball_angle)
+                        # interpolate angle from start to final (wrap properly)
+                        diff = (final_screen_angle - start_a)
+                        # wrap difference to [-pi, pi]
+                        diff = (diff + math.pi) % (2 * math.pi) - math.pi
+                        curr_a = start_a + diff * t_e
+                        bx = spinner_center[0] + math.cos(curr_a) * curr_r
+                        by = spinner_center[1] + math.sin(curr_a) * curr_r * 0.92
+                        # small shadow and ball
+                        pygame.draw.circle(screen, (10, 10, 10, 160), (int(bx)+2, int(by)+3), ball_r)
+                        pygame.draw.circle(screen, (245, 245, 245), (int(bx), int(by)), ball_r)
+                        # if migration completed, snap final values and trigger bounce
+                        if t_clamped >= 1.0:
+                            try:
+                                ball_migrating = False
+                                ball_angle = final_screen_angle
+                                # set small bounce to imply settling
+                                ball_bounce_amp = 6.0
+                                ball_bounce_phase = 0.0
+                                # play a landing/bounce sound if available
+                                if (not last_landing_played) and audio_manager is not None and landing_sfx_name is not None:
+                                    try:
+                                        audio_manager.play_sound_effect(landing_sfx_name, volume=0.9)
+                                    except Exception:
+                                        pass
+                            except Exception:
+                                pass
+                    # handle bounce after landing
+                    if wheel_result_settled or (not ball_migrating and ball_bounce_amp > 0.01):
+                        # simple decaying vertical bounce mapped to y-position
+                        ball_bounce_phase += dt * 18.0
+                        bounce_y = math.fabs(math.sin(ball_bounce_phase)) * ball_bounce_amp
+                        # decay amplitude
+                        ball_bounce_amp *= ball_bounce_decay
+                        # apply bounce to last drawn ball by shifting a small amount upward
+                        # (we redraw shadow/ball above, so adjust by negative bounce)
+                        # to keep code simple we don't re-blit; instead a tiny highlight near the ball
+                        # Optionally, if more precision is desired we could store last bx,by and re-blit.
+                        pass
+                except Exception:
+                    pass
+                # draw center hub and rim onto rotated image instead (so they rotate with wheel)
+                # we added hub/rim/spokes to base_wheel_surf when caching; nothing more to draw here
 
-            # Orbiting ball removed — no outside ball is drawn.
+                # Orbiting ball removed — no outside ball is drawn.
 
             # tips
             if now - last_tip > 3.0:

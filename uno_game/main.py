@@ -352,6 +352,26 @@ def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 1
         clock.tick(60)
 
 
+def show_loading_screen(screen: pygame.Surface, duration: float = 2.0):
+    """Display a loading screen with backgammon board background and animated progress.
+    
+    Args:
+        screen: The pygame surface to draw on
+        duration: How long to show the loading screen (seconds)
+    """
+    from ui.loading_screen import LoadingScreen
+    
+    # Create a dedicated loading screen
+    loader = LoadingScreen(
+        title='Loading Game...',
+        subtitle='Preparing your game session',
+        duration=duration
+    )
+    
+    # Run the loading screen (it will auto-close after duration)
+    loader.run(screen)
+
+
 def player_setup(screen: pygame.Surface):
     """Pre-game form with clickable buttons, caret blinking, and a scrollable players list.
 
@@ -613,6 +633,10 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     if not setup:
         return
     player_names, starting_chips = setup
+    
+    # Show loading screen while preparing game
+    show_loading_screen(screen, duration=2.5)
+    
     gm = GameManager(player_names, starting_chips, screen=screen)
     
     # Initialize game settings for keybindings

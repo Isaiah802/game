@@ -259,15 +259,9 @@ class StartMenu:
         self.dice_spawn_timer = 0.0
         self.dice_spawn_interval = 1.25  # spawn a die every ~1.25s
         self.max_dice = 6
-        # vignette and spotlight (clean focus)
+        # vignette (clean focus)
         self.vignette_surf = _make_vignette(self.width, self.height)
-        self.spotlight_enabled = True
-        self.spotlight_surf = _make_spotlight(180)
-        self.spotlight_center = [self.width // 2, 60]
-        self.spotlight_angle = 0.0
-        self.spotlight_drift_radius = 36.0
-        self.spotlight_speed = 0.6
-        self.spotlight_mouse_influence = 0.08
+        self.spotlight_enabled = False  # Spotlight disabled for cleaner look
 
         # (avatar vars already initialized above prior to build_ui)
 
