@@ -161,11 +161,7 @@ def run_shop(screen: pygame.Surface, player_chips: int, settings: Settings) -> T
             if item is None and event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                 return None, player_chips
             elif item:
-                print(f"[SHOP DEBUG] Buying {item.name}")
-                print(f"[SHOP DEBUG] Before purchase: {player_chips} chips")
-                print(f"[SHOP DEBUG] Item cost: {item.cost} chips")
                 remaining_chips = player_chips + item.cost
-                print(f"[SHOP DEBUG] After purchase: {remaining_chips} chips (added {item.cost})")
                 shop.player_chips = remaining_chips
                 shop.show_message(f"Bought {item.name}!")
                 player_chips = remaining_chips

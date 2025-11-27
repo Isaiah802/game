@@ -18,10 +18,60 @@ except Exception:
 
 
 DEFAULT_ACHIEVEMENTS: List[Dict] = [
+    # Winning achievements
     {"id": "first_win", "title": "First Win", "desc": "Win your first round.", "unlocked": False},
-    {"id": "big_roller", "title": "Big Roller", "desc": "Roll a 20 total.", "unlocked": False},
-    {"id": "collector", "title": "Collector", "desc": "Buy 10 items from the shop.", "unlocked": False},
     {"id": "lucky_strike", "title": "Lucky Strike", "desc": "Win two rounds in a row.", "unlocked": False},
+    {"id": "triple_threat", "title": "Triple Threat", "desc": "Win three rounds in a row.", "unlocked": False},
+    {"id": "unstoppable", "title": "Unstoppable", "desc": "Win five rounds in a row.", "unlocked": False},
+    {"id": "champion", "title": "Champion", "desc": "Win a game (reach 0 chips).", "unlocked": False},
+    
+    # Rolling achievements
+    {"id": "big_roller", "title": "Big Roller", "desc": "Roll a total of 20 or more.", "unlocked": False},
+    {"id": "perfect_roll", "title": "Perfect Roll", "desc": "Roll three sixes (666).", "unlocked": False},
+    {"id": "zanzibar", "title": "Zanzibar!", "desc": "Roll the legendary 4-5-6.", "unlocked": False},
+    {"id": "snake_eyes", "title": "Snake Eyes", "desc": "Roll three ones (111).", "unlocked": False},
+    {"id": "unlucky_roll", "title": "Unlucky Roll", "desc": "Roll the cursed 1-2-3.", "unlocked": False},
+    {"id": "roll_master", "title": "Roll Master", "desc": "Roll 100 times in a single game.", "unlocked": False},
+    {"id": "dice_god", "title": "Dice God", "desc": "Roll 5 straights in one game.", "unlocked": False},
+    
+    # Shopping achievements
+    {"id": "collector", "title": "Collector", "desc": "Buy 10 items from the shop.", "unlocked": False},
+    {"id": "shopaholic", "title": "Shopaholic", "desc": "Buy 25 items from the shop.", "unlocked": False},
+    {"id": "big_spender", "title": "Big Spender", "desc": "Spend 100 chips in the shop.", "unlocked": False},
+    {"id": "window_shopper", "title": "Window Shopper", "desc": "Visit the shop 10 times without buying.", "unlocked": False},
+    
+    # Inventory/Item achievements
+    {"id": "pack_rat", "title": "Pack Rat", "desc": "Hold 10 items in inventory at once.", "unlocked": False},
+    {"id": "item_hoarder", "title": "Item Hoarder", "desc": "Accumulate 20 total items (doesn't need to be at once).", "unlocked": False},
+    {"id": "item_user", "title": "Item User", "desc": "Use 15 items in a single game.", "unlocked": False},
+    {"id": "strategist", "title": "Strategist", "desc": "Use 3 different item types in one game.", "unlocked": False},
+    
+    # Chip-related achievements
+    {"id": "high_roller", "title": "High Roller", "desc": "Reach 50 chips at any point.", "unlocked": False},
+    {"id": "chip_baron", "title": "Chip Baron", "desc": "Reach 100 chips at any point.", "unlocked": False},
+    {"id": "comeback_kid", "title": "Comeback Kid", "desc": "Win after having 3 or fewer chips.", "unlocked": False},
+    {"id": "close_call", "title": "Close Call", "desc": "Win with exactly 1 chip remaining.", "unlocked": False},
+    
+    # Special hand achievements
+    {"id": "triple_master", "title": "Triple Master", "desc": "Roll three of a kind 5 times.", "unlocked": False},
+    {"id": "pair_collector", "title": "Pair Collector", "desc": "Roll 10 pairs in one game.", "unlocked": False},
+    {"id": "straight_shooter", "title": "Straight Shooter", "desc": "Roll a straight (1-2-3, 2-3-4, 3-4-5, or 4-5-6).", "unlocked": False},
+    
+    # Participation achievements
+    {"id": "veteran", "title": "Veteran", "desc": "Play 10 complete games.", "unlocked": False},
+    {"id": "dedicated", "title": "Dedicated", "desc": "Play 50 rounds total.", "unlocked": False},
+    {"id": "marathon_player", "title": "Marathon Player", "desc": "Play a game lasting 30+ rounds.", "unlocked": False},
+    
+    # Social/Fun achievements
+    {"id": "party_starter", "title": "Party Starter", "desc": "Start a game with 4+ players.", "unlocked": False},
+    {"id": "lone_wolf", "title": "Lone Wolf", "desc": "Play a 2-player game.", "unlocked": False},
+    {"id": "generous", "title": "Generous", "desc": "Give away chips to another player (via losing rounds).", "unlocked": False},
+    
+    # Secret/Easter Egg achievements
+    {"id": "achievement_hunter", "title": "Achievement Hunter", "desc": "Unlock 10 achievements.", "unlocked": False},
+    {"id": "completionist", "title": "Completionist", "desc": "Unlock all achievements.", "unlocked": False},
+    {"id": "early_bird", "title": "Early Bird", "desc": "Win a game in under 10 rounds.", "unlocked": False},
+    {"id": "persistence", "title": "Persistence", "desc": "Continue playing after a 10-round losing streak.", "unlocked": False},
 ]
 
 

@@ -48,6 +48,10 @@ class AchievementsMenu:
             (200, 140, 220),
             (240, 200, 90),
         ]
+        # Scrolling support
+        self.scroll_offset = 0
+        self.max_visible_items = 6  # Number of achievements visible at once
+        self.item_height = 64
 
     def draw_item(self, item, pos_y):
         # small pixel-art icon (colored when unlocked, gray when locked)
@@ -107,15 +111,35 @@ class AchievementsMenu:
         title = self.title_font.render("Achievements", True, (230, 230, 230))
         self.screen.blit(title, (self.x + 20, self.y + 12))
 
-        # instructions / back hint
-        hint = self.font.render("Press Esc or Backspace to return", True, (180, 180, 180))
+        # instructions / back hint with scroll info
+        total_achievements = len(self.achievements)
+        hint = self.font.render(f"Press Esc or Backspace to return | Scroll: Arrow Keys or Mouse Wheel | {total_achievements} Total", True, (180, 180, 180))
         self.screen.blit(hint, (self.x + 20, self.y + 48))
 
-        # list
-        start_y = self.y + 90
-        gap = 64
-        for idx, item in enumerate(self.achievements):
-            self.draw_item(item, start_y + idx * gap)
+        # Create clipping region for scrollable list
+        list_start_y = self.y + 90
+        list_area_height = self.height - 160  # Leave room for title, hint, and back button
+        clip_rect = pygame.Rect(self.x, list_start_y, self.width, list_area_height)
+        
+        # Set clipping area
+        original_clip = self.screen.get_clip()
+        self.screen.set_clip(clip_rect)
+        
+        # Draw visible achievements with scroll offset
+        start_idx = self.scroll_offset
+        end_idx = min(len(self.achievements), start_idx + self.max_visible_items + 2)  # +2 for partial visibility
+        
+        for idx in range(start_idx, end_idx):
+            item = self.achievements[idx]
+            item_y = list_start_y + (idx - self.scroll_offset) * self.item_height
+            self.draw_item(item, item_y)
+        
+        # Restore original clip
+        self.screen.set_clip(original_clip)
+        
+        # Draw scrollbar if needed
+        if len(self.achievements) > self.max_visible_items:
+            self._draw_scrollbar(list_start_y, list_area_height)
 
         # draw a simple back button
         btn_w = 120
@@ -131,13 +155,67 @@ class AchievementsMenu:
         self.screen.blit(txt, tr)
         # store rect for click handling
         self._back_rect = btn_rect
+    
+    def _draw_scrollbar(self, list_start_y: int, list_area_height: int):
+        """Draw a scrollbar on the right side of the list."""
+        scrollbar_width = 8
+        scrollbar_x = self.x + self.width - 20
+        scrollbar_y = list_start_y
+        scrollbar_height = list_area_height
+        
+        # Background track
+        pygame.draw.rect(self.screen, (60, 60, 60), 
+                        (scrollbar_x, scrollbar_y, scrollbar_width, scrollbar_height), 
+                        border_radius=4)
+        
+        # Calculate thumb size and position
+        total_items = len(self.achievements)
+        visible_ratio = self.max_visible_items / total_items
+        thumb_height = max(20, int(scrollbar_height * visible_ratio))
+        
+        max_scroll = total_items - self.max_visible_items
+        if max_scroll > 0:
+            scroll_ratio = self.scroll_offset / max_scroll
+            thumb_y = scrollbar_y + int((scrollbar_height - thumb_height) * scroll_ratio)
+        else:
+            thumb_y = scrollbar_y
+        
+        # Draw thumb
+        pygame.draw.rect(self.screen, (150, 150, 150), 
+                        (scrollbar_x, thumb_y, scrollbar_width, thumb_height), 
+                        border_radius=4)
 
     def handle_event(self, event: pygame.event.Event) -> bool:
         """Return True when this menu should close."""
         if event.type == pygame.KEYDOWN:
             if event.key in (pygame.K_ESCAPE, pygame.K_BACKSPACE):
                 return True
-        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            elif event.key == pygame.K_UP:
+                # Scroll up
+                self.scroll_offset = max(0, self.scroll_offset - 1)
+            elif event.key == pygame.K_DOWN:
+                # Scroll down
+                max_scroll = max(0, len(self.achievements) - self.max_visible_items)
+                self.scroll_offset = min(max_scroll, self.scroll_offset + 1)
+            elif event.key == pygame.K_PAGEUP:
+                # Scroll up by page
+                self.scroll_offset = max(0, self.scroll_offset - self.max_visible_items)
+            elif event.key == pygame.K_PAGEDOWN:
+                # Scroll down by page
+                max_scroll = max(0, len(self.achievements) - self.max_visible_items)
+                self.scroll_offset = min(max_scroll, self.scroll_offset + self.max_visible_items)
+            elif event.key == pygame.K_HOME:
+                # Scroll to top
+                self.scroll_offset = 0
+            elif event.key == pygame.K_END:
+                # Scroll to bottom
+                max_scroll = max(0, len(self.achievements) - self.max_visible_items)
+                self.scroll_offset = max_scroll
+        elif event.type == pygame.MOUSEWHEEL:
+            # Scroll with mouse wheel
+            max_scroll = max(0, len(self.achievements) - self.max_visible_items)
+            self.scroll_offset = max(0, min(max_scroll, self.scroll_offset - event.y))
+        elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
             if hasattr(self, '_back_rect') and self._back_rect.collidepoint(event.pos):
                 return True
         return False

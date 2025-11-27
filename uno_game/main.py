@@ -444,13 +444,51 @@ def player_setup(screen: pygame.Surface):
                 elif event.key == pygame.K_RETURN:
                     if input_text.strip():
                         name = input_text.strip()[:max_name_len]
-                        if name in players:
+                        # Validate name
+                        if not name:
+                            error_msg = 'Name cannot be empty'
+                            try:
+                                from audio.audio import AudioManager
+                                temp_audio = AudioManager(audio_folder=ASSETS_DIR)
+                                temp_audio.play_sound_effect('cubes.mp3', volume=0.4)  # Error sound
+                            except Exception:
+                                pass
+                        elif len(name) < 2:
+                            error_msg = 'Name must be at least 2 characters'
+                            try:
+                                from audio.audio import AudioManager
+                                temp_audio = AudioManager(audio_folder=ASSETS_DIR)
+                                temp_audio.play_sound_effect('cubes.mp3', volume=0.4)  # Error sound
+                            except Exception:
+                                pass
+                        elif not any(c.isalnum() for c in name):
+                            error_msg = 'Name must contain letters or numbers'
+                            try:
+                                from audio.audio import AudioManager
+                                temp_audio = AudioManager(audio_folder=ASSETS_DIR)
+                                temp_audio.play_sound_effect('cubes.mp3', volume=0.4)  # Error sound
+                            except Exception:
+                                pass
+                        elif name in players:
                             error_msg = 'Name already used'
+                            try:
+                                from audio.audio import AudioManager
+                                temp_audio = AudioManager(audio_folder=ASSETS_DIR)
+                                temp_audio.play_sound_effect('cubes.mp3', volume=0.4)  # Error sound
+                            except Exception:
+                                pass
                         else:
                             players.append(name)
                             input_text = ''
                             error_msg = ''
                             selected_idx = len(players) - 1
+                            # Play success sound (import audio if needed)
+                            try:
+                                from audio.audio import AudioManager
+                                temp_audio = AudioManager(audio_folder=ASSETS_DIR)
+                                temp_audio.play_sound_effect('mouse-click-290204.mp3', volume=0.5)
+                            except Exception:
+                                pass
                 elif event.key == pygame.K_BACKSPACE:
                     if input_text:
                         input_text = input_text[:-1]
@@ -634,8 +672,15 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         return
     player_names, starting_chips = setup
     
+    # Fade out before loading screen
+    from ui.ui_utils import fade_transition
+    fade_transition(screen, duration=0.3, fade_out=True)
+    
     # Show loading screen while preparing game
     show_loading_screen(screen, duration=2.5)
+    
+    # Fade in after loading
+    fade_transition(screen, duration=0.3, fade_out=False)
     
     gm = GameManager(player_names, starting_chips, screen=screen)
     
@@ -705,6 +750,11 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                     current_player_idx = (current_player_idx + 1) % len(player_names)
                 elif event.key == pygame.K_SPACE:
                     # Play a round immediately and show improved (3D) dice.
+                    # Play dice roll sound
+                    try:
+                        audio.play_sound_effect('dice_bounce.mp3', volume=0.6)
+                    except Exception:
+                        pass
                     try:
                         gm.play_round()
                     except Exception:
@@ -750,6 +800,11 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                         elif event.key == pygame.K_RETURN and inventory_menu.selected_item:
                             # Use the selected item
                             if gm.use_item(current_player, inventory_menu.selected_item.name):
+                                # Play use item sound
+                                try:
+                                    audio.play_sound_effect('whoosh.mp3', volume=0.5)
+                                except Exception:
+                                    pass
                                 # Refresh items list
                                 items = []
                                 for item_name, quantity in player_data['inventory'].get_all_items().items():
@@ -768,6 +823,11 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                                     inventory_menu.selected_item = items[idx - 1]
                                     if idx - 1 < inventory_menu.scroll_offset:
                                         inventory_menu.scroll_offset = idx - 1
+                                    # Navigation sound
+                                    try:
+                                        audio.play_sound_effect('mouse-click-290204.mp3', volume=0.3)
+                                    except Exception:
+                                        pass
                             elif items:
                                 inventory_menu.selected_item = items[0]
                         elif event.key == pygame.K_DOWN:
@@ -775,6 +835,11 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                                 idx = items.index(inventory_menu.selected_item)
                                 if idx < len(items) - 1:
                                     inventory_menu.selected_item = items[idx + 1]
+                                    # Navigation sound
+                                    try:
+                                        audio.play_sound_effect('mouse-click-290204.mp3', volume=0.3)
+                                    except Exception:
+                                        pass
                                     if idx + 1 >= inventory_menu.scroll_offset + inventory_menu.max_items_shown:
                                         inventory_menu.scroll_offset = idx + 1 - inventory_menu.max_items_shown + 1
                             elif items:
@@ -810,7 +875,6 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
             if 'inventory' not in player_data or player_data['inventory'] is None:
                 from items import Inventory
                 player_data['inventory'] = Inventory()
-                print(f"[DEBUG] Initialized inventory for {current_player}")
             
             shop_menu = ShopMenu(screen, player_chips, game_settings)
             available_items = list(registry.items.values())
@@ -826,28 +890,68 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                     elif event.type == pygame.KEYDOWN:
                         if event.key == pygame.K_ESCAPE:
                             shop_running = False
-                        elif event.key == pygame.K_RETURN and shop_menu.selected_item:
-                            # Try to buy the item (adds chips since goal is to reach 0)
-                            item = shop_menu.selected_item
-                            print(f"[SHOP DEBUG] Buying {item.name}")
-                            print(f"[SHOP DEBUG] Before purchase: {player_data['chips']} chips")
-                            print(f"[SHOP DEBUG] Item cost: {item.cost} chips")
-                            player_data['chips'] += item.cost  # ADD chips (penalty for buying)
-                            print(f"[SHOP DEBUG] After purchase: {player_data['chips']} chips")
-                            player_data['inventory'].add_item(item)
-                            shop_menu.player_chips = player_data['chips']
-                            shop_menu.message = f"Bought {item.name}!"
-                            shop_menu.message_color = shop_menu.success_color
-                            shop_menu.message_timer = pygame.time.get_ticks() + 2000
-                            # Track purchases for the 'collector' achievement
+                            # Check window shopper achievement on exit
                             try:
-                                pc = player_data.get('purchase_count', 0) + 1
-                                player_data['purchase_count'] = pc
-                                if pc >= 10:
-                                    from achievements import achievements as achievements_manager
-                                    achievements_manager.unlock('collector')
+                                from achievements import achievements as achievements_manager
+                                visits = player_data.get('shop_visits_no_buy', 0)
+                                if visits >= 10:
+                                    achievements_manager.unlock('window_shopper')
                             except Exception:
                                 pass
+                        elif event.key == pygame.K_RETURN and shop_menu.selected_item:
+                            # Confirm purchase
+                            from ui.ui_utils import show_confirmation_dialog
+                            item = shop_menu.selected_item
+                            confirm_msg = f"Buy {item.name} for {item.cost} chips? (This adds to your total)"
+                            if show_confirmation_dialog(screen, confirm_msg, "Confirm Purchase"):
+                                # Try to buy the item (adds chips since goal is to reach 0)
+                                player_data['chips'] += item.cost  # ADD chips (penalty for buying)
+                                player_data['inventory'].add_item(item)
+                                shop_menu.player_chips = player_data['chips']
+                                shop_menu.message = f"Bought {item.name}!"
+                                shop_menu.message_color = shop_menu.success_color
+                                shop_menu.message_timer = pygame.time.get_ticks() + 2000
+                                # Play purchase sound
+                                try:
+                                    audio.play_sound_effect('mouse-click-290204.mp3', volume=0.7)
+                                except Exception:
+                                    pass
+                                
+                                # Track purchases for achievements
+                                try:
+                                    from achievements import achievements as achievements_manager
+                                    pc = player_data.get('purchase_count', 0) + 1
+                                    player_data['purchase_count'] = pc
+                                    
+                                    # Track total chips spent
+                                    player_data['chips_spent'] = player_data.get('chips_spent', 0) + item.cost
+                                    
+                                    # Track total items bought
+                                    player_data['items_bought'] = player_data.get('items_bought', 0) + 1
+                                    
+                                    # Check shop achievements
+                                    if pc >= 25:
+                                        achievements_manager.unlock('shopaholic')
+                                    elif pc >= 10:
+                                        achievements_manager.unlock('collector')
+                                    
+                                    if player_data['chips_spent'] >= 100:
+                                        achievements_manager.unlock('big_spender')
+                                    
+                                    # Check for item hoarder (20 total items bought)
+                                    if player_data['items_bought'] >= 20:
+                                        achievements_manager.unlock('item_hoarder')
+                                    
+                                    # Reset window shopper counter on purchase
+                                    player_data['shop_visits_no_buy'] = 0
+                                except Exception:
+                                    pass
+                            else:
+                                # Cancelled purchase - track for window shopper
+                                try:
+                                    player_data['shop_visits_no_buy'] = player_data.get('shop_visits_no_buy', 0) + 1
+                                except Exception:
+                                    pass
                         elif event.key == pygame.K_UP:
                             if available_items and shop_menu.selected_item:
                                 idx = available_items.index(shop_menu.selected_item)
@@ -855,6 +959,11 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                                     shop_menu.selected_item = available_items[idx - 1]
                                     if idx - 1 < shop_menu.scroll_offset:
                                         shop_menu.scroll_offset = idx - 1
+                                    # Navigation sound
+                                    try:
+                                        audio.play_sound_effect('mouse-click-290204.mp3', volume=0.3)
+                                    except Exception:
+                                        pass
                             elif available_items:
                                 shop_menu.selected_item = available_items[0]
                         elif event.key == pygame.K_DOWN:
@@ -862,6 +971,11 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                                 idx = available_items.index(shop_menu.selected_item)
                                 if idx < len(available_items) - 1:
                                     shop_menu.selected_item = available_items[idx + 1]
+                                    # Navigation sound
+                                    try:
+                                        audio.play_sound_effect('mouse-click-290204.mp3', volume=0.3)
+                                    except Exception:
+                                        pass
                                     if idx + 1 >= shop_menu.scroll_offset + shop_menu.max_items_shown:
                                         shop_menu.scroll_offset = idx + 1 - shop_menu.max_items_shown + 1
                             elif available_items:
@@ -885,6 +999,13 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         current_player = player_names[current_player_idx]
         header = font.render(f'Current Player: {current_player} | Space: Roll | I: Inventory | S: Shop | Tab: Switch Player | Esc: Menu', True, (255, 255, 255))
         screen.blit(header, (20, 20))
+        
+        # Show tooltip on hover over header
+        mx, my = pygame.mouse.get_pos()
+        if my < 40:
+            from ui.ui_utils import show_tooltip
+            tooltip_text = "Space: Roll dice | I: Open inventory | S: Shop for items | Tab: Switch player view | Esc: Return to menu"
+            show_tooltip(screen, tooltip_text, mx, my + 20)
 
         # show transient round message (winner) if present
         if round_message and time.time() < round_message_end:
@@ -903,10 +1024,19 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
 
         for i, name in enumerate(gm.player_order):
             chips = gm.players.get(name, {}).get('chips', 0)
+            
+            # Highlight current player
+            is_current = (i == current_player_idx)
+            if is_current:
+                highlight_rect = pygame.Rect(10, y - 12, screen.get_width() - 20, 48)
+                pygame.draw.rect(screen, (80, 100, 120), highlight_rect, border_radius=8)
+                pygame.draw.rect(screen, (150, 180, 200), highlight_rect, 2, border_radius=8)
+            
             # draw chip stack at fixed left column, then render player text to the right of chips
             stack_rect = draw_chip_stack(screen, 20, y - 6, chips, chip_radius=8, max_display=10, font=font)
             try:
-                txt = font.render(f'{name}: {chips} chips', True, (230, 230, 230))
+                color = (255, 255, 120) if is_current else (230, 230, 230)
+                txt = font.render(f'{name}: {chips} chips', True, color)
                 screen.blit(txt, (stack_rect.right + 8, y))
             except Exception:
                 pass

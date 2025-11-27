@@ -1,6 +1,7 @@
 import os
 import pygame
 import time
+from .ui_utils import create_particle_burst, update_and_draw_particles
 
 
 class WinnerScreen:
@@ -43,9 +44,19 @@ class WinnerScreen:
                 sound_obj = None
                 sfx_channel = None
 
+        # Create celebration particles
+        particles = []
+        last_burst = 0
+        burst_interval = 0.3
+        
         running = True
+        last_time = time.time()
+        
         while running:
             now = time.time()
+            dt = now - last_time
+            last_time = now
+            
             t = min(1.0, (now - start) / max(0.01, self.duration))
             alpha = int(t * 255)
 
@@ -57,6 +68,17 @@ class WinnerScreen:
                     running = False
 
             screen.fill(self.bg_color)
+            
+            # Spawn particle bursts periodically
+            if now - last_burst > burst_interval and t > 0.2:
+                import random
+                burst_x = random.randint(width // 4, 3 * width // 4)
+                burst_y = random.randint(height // 4, 3 * height // 4)
+                particles.extend(create_particle_burst(burst_x, burst_y, count=25))
+                last_burst = now
+            
+            # Update and draw particles
+            particles = update_and_draw_particles(screen, particles, dt)
 
             # Winner title
             title_surf = font_title.render(f"{self.winner_name} Wins!", True, self.title_color)

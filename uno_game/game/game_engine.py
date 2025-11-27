@@ -28,7 +28,19 @@ class GameManager(FoodDrinkMixin):
         self.players = {name: {
             'chips': starting_chips,
             'active_effects': {},  # {Effect: turns_remaining}
-            'inventory': None  # Will be set from main.py
+            'inventory': None,  # Will be set from main.py
+            # Achievement tracking stats
+            'rounds_won': 0,
+            'rolls_total': 0,
+            'items_used': 0,
+            'items_bought': 0,
+            'chips_spent': 0,
+            'shop_visits_no_buy': 0,
+            'triples_rolled': 0,
+            'pairs_rolled': 0,
+            'straights_rolled': 0,
+            'max_chips': starting_chips,
+            'item_types_used': set(),
         } for name in player_names}
         self.player_order = player_names
         self.round_results = {}
@@ -37,6 +49,9 @@ class GameManager(FoodDrinkMixin):
         # rounds in a row".
         self._last_round_winner = None
         self._streak_count = 0
+        # Global game statistics
+        self._total_rounds_played = 0
+        self._games_completed = 0
         print(f"Zanzibar game started with players: {', '.join(player_names)}")
         self.print_scores()
 
@@ -137,20 +152,17 @@ class GameManager(FoodDrinkMixin):
         print("\n--- Starting New Round ---")
         audio.play_sound_effect("dice_b.wav", volume=0.8)
         self.round_results = {}
+        self._total_rounds_played += 1
 
         # First player's turn sets the roll limit for others
         first_player = self.player_order[0]
         print(f"\n{first_player}'s turn (first player):")
         turn_result = self._simulate_player_turn(max_rolls=3, player_name=first_player)
         self.round_results[first_player] = turn_result
-        # Check for big roller achievement (total >= 20)
-        try:
-            total = sum(turn_result.get('final_roll', []))
-            if total >= 20:
-                from achievements import achievements as achievements_manager
-                achievements_manager.unlock('big_roller')
-        except Exception:
-            pass
+        
+        # Track roll stats and check achievements
+        self._check_roll_achievements(first_player, turn_result.get('final_roll', []))
+        self.players[first_player]['rolls_total'] += turn_result.get('rolls_taken', 1)
         roll_limit = turn_result['rolls_taken']
         print(f"{first_player} finished in {roll_limit} roll(s) with {turn_result['final_roll']}")
 
@@ -160,14 +172,10 @@ class GameManager(FoodDrinkMixin):
             print(f"\n{player}'s turn (must finish in {roll_limit} roll(s) or fewer):")
             turn_result = self._simulate_player_turn(max_rolls=roll_limit, player_name=player)
             self.round_results[player] = turn_result
-            # Check for big roller achievement (total >= 20)
-            try:
-                total = sum(turn_result.get('final_roll', []))
-                if total >= 20:
-                    from achievements import achievements as achievements_manager
-                    achievements_manager.unlock('big_roller')
-            except Exception:
-                pass
+            
+            # Track roll stats and check achievements
+            self._check_roll_achievements(player, turn_result.get('final_roll', []))
+            self.players[player]['rolls_total'] += turn_result.get('rolls_taken', 1)
             print(f"{player} finished in {turn_result['rolls_taken']} roll(s) with {turn_result['final_roll']}")
 
         self._resolve_round()
@@ -209,17 +217,37 @@ class GameManager(FoodDrinkMixin):
 
         self.print_scores()
 
-        # Handle consecutive-round-win achievement (two wins in a row)
+        # Track winner stats and handle streak achievements
         try:
+            from achievements import achievements as achievements_manager
+            self.players[winner]['rounds_won'] += 1
+            
             if winner == self._last_round_winner:
                 self._streak_count += 1
             else:
                 self._streak_count = 1
                 self._last_round_winner = winner
 
-            if self._streak_count >= 2:
-                from achievements import achievements as achievements_manager
+            # Check streak achievements
+            if self._streak_count >= 5:
+                achievements_manager.unlock('unstoppable')
+            elif self._streak_count >= 3:
+                achievements_manager.unlock('triple_threat')
+            elif self._streak_count >= 2:
                 achievements_manager.unlock('lucky_strike')
+            
+            # Check for early bird (win in under 10 rounds)
+            if self._total_rounds_played >= 10:
+                achievements_manager.unlock('early_bird')
+            
+            # Check for marathon game
+            if self._total_rounds_played >= 30:
+                achievements_manager.unlock('marathon_player')
+            
+            # Check dedicated player achievement
+            total_rounds = sum(p.get('rounds_won', 0) for p in self.players.values())
+            if total_rounds >= 50:
+                achievements_manager.unlock('dedicated')
         except Exception:
             pass
 
@@ -231,11 +259,75 @@ class GameManager(FoodDrinkMixin):
             # if something odd happened, leave order as-is
             pass
 
+    def _check_roll_achievements(self, player_name: str, roll: list):
+        """Check and unlock achievements based on the roll."""
+        try:
+            from achievements import achievements as achievements_manager
+            player_data = self.players[player_name]
+            sorted_roll = sorted(roll)
+            
+            # Check for specific rolls
+            if sorted_roll == [6, 6, 6]:
+                achievements_manager.unlock('perfect_roll')
+            elif sorted_roll == [1, 1, 1]:
+                achievements_manager.unlock('snake_eyes')
+            elif sorted_roll == [4, 5, 6]:
+                achievements_manager.unlock('zanzibar')
+            elif sorted_roll == [1, 2, 3]:
+                achievements_manager.unlock('unlucky_roll')
+            
+            # Check for straights
+            if sorted_roll in [[1, 2, 3], [2, 3, 4], [3, 4, 5], [4, 5, 6]]:
+                achievements_manager.unlock('straight_shooter')
+                player_data['straights_rolled'] = player_data.get('straights_rolled', 0) + 1
+                if player_data['straights_rolled'] >= 5:
+                    achievements_manager.unlock('dice_god')
+            
+            # Check for three of a kind
+            if sorted_roll[0] == sorted_roll[1] == sorted_roll[2]:
+                player_data['triples_rolled'] = player_data.get('triples_rolled', 0) + 1
+                if player_data['triples_rolled'] >= 5:
+                    achievements_manager.unlock('triple_master')
+            
+            # Check for pairs
+            if sorted_roll[0] == sorted_roll[1] or sorted_roll[1] == sorted_roll[2]:
+                player_data['pairs_rolled'] = player_data.get('pairs_rolled', 0) + 1
+                if player_data['pairs_rolled'] >= 10:
+                    achievements_manager.unlock('pair_collector')
+            
+            # Check for big roller (total >= 20)
+            total = sum(roll)
+            if total >= 20:
+                achievements_manager.unlock('big_roller')
+            
+            # Check for roll master (100 rolls in a game)
+            if player_data.get('rolls_total', 0) >= 100:
+                achievements_manager.unlock('roll_master')
+            
+        except Exception as e:
+            pass
+
     def print_scores(self):
         """Prints the current chip counts for all players."""
         print("\n--- Current Chip Counts ---")
         for player, data in self.players.items():
             print(f"{player}: {data['chips']} chips")
+            # Check for chip-based achievements
+            try:
+                from achievements import achievements as achievements_manager
+                current_chips = data['chips']
+                max_chips = data.get('max_chips', current_chips)
+                
+                if current_chips > max_chips:
+                    data['max_chips'] = current_chips
+                    max_chips = current_chips
+                
+                if max_chips >= 100:
+                    achievements_manager.unlock('chip_baron')
+                elif max_chips >= 50:
+                    achievements_manager.unlock('high_roller')
+            except Exception:
+                pass
         print("---------------------------")
 
     def check_for_winner(self):
@@ -275,6 +367,12 @@ class GameManager(FoodDrinkMixin):
         if not inventory.remove_item(item):
             return False
         
+        # Track item usage
+        player_data['items_used'] = player_data.get('items_used', 0) + 1
+        if 'item_types_used' not in player_data:
+            player_data['item_types_used'] = set()
+        player_data['item_types_used'].add(item_name)
+        
         # Apply effects
         if 'active_effects' not in player_data:
             player_data['active_effects'] = {}
@@ -282,6 +380,21 @@ class GameManager(FoodDrinkMixin):
         for effect in item.effects:
             player_data['active_effects'][effect] = item.duration
             print(f"[EFFECT] {player_name} gained {effect.value} for {item.duration} turns!")
+        
+        # Check item-related achievements
+        try:
+            from achievements import achievements as achievements_manager
+            if player_data['items_used'] >= 15:
+                achievements_manager.unlock('item_user')
+            if len(player_data['item_types_used']) >= 3:
+                achievements_manager.unlock('strategist')
+            
+            # Check inventory size for pack rat achievement
+            total_items = sum(inventory.get_all_items().values())
+            if total_items >= 10:
+                achievements_manager.unlock('pack_rat')
+        except Exception:
+            pass
             
         return True
     
@@ -342,6 +455,55 @@ class GameManager(FoodDrinkMixin):
 
     def winner_found(self, player):
         print(f"Congratulations {player}")
+        # Play victory sound
+        try:
+            audio.play_sound_effect('HTX.mp3', volume=0.8)  # Victory celebration
+        except Exception:
+            pass
+        
+        # Check win-related achievements
+        try:
+            from achievements import achievements as achievements_manager
+            player_data = self.players[player]
+            
+            # Champion achievement for winning the game
+            achievements_manager.unlock('champion')
+            achievements_manager.unlock('first_win')
+            
+            # Check for comeback kid (win with 3 or fewer chips at any point)
+            if player_data.get('max_chips', 20) <= 3:
+                achievements_manager.unlock('comeback_kid')
+            
+            # Check for close call (win with exactly 1 chip)
+            if player_data['chips'] == 1:
+                achievements_manager.unlock('close_call')
+            
+            # Check for early bird (win in under 10 rounds)
+            if self._total_rounds_played < 10:
+                achievements_manager.unlock('early_bird')
+            
+            # Increment games completed counter
+            self._games_completed += 1
+            if self._games_completed >= 10:
+                achievements_manager.unlock('veteran')
+            
+            # Check player count achievements
+            if len(self.player_order) >= 4:
+                achievements_manager.unlock('party_starter')
+            elif len(self.player_order) == 2:
+                achievements_manager.unlock('lone_wolf')
+            
+            # Check meta achievements
+            unlocked_count = sum(1 for ach in achievements_manager.get_all() if ach.get('unlocked'))
+            if unlocked_count >= 10:
+                achievements_manager.unlock('achievement_hunter')
+            total_achievements = len(achievements_manager.get_all())
+            if unlocked_count >= total_achievements - 1:  # All except completionist itself
+                achievements_manager.unlock('completionist')
+                
+        except Exception:
+            pass
+        
         winner_screen = WinnerScreen(
             winner_name=player,
             message="Master of Dice!"
@@ -351,10 +513,9 @@ class GameManager(FoodDrinkMixin):
         # `_end_game` flag and return to the start menu.
         winner_screen.run(self.screen, audio_manager=audio)
         pygame.time.delay(2000)
-        # Unlock the 'first_win' achievement for this session and show popup.
+        # Show achievement popup
         try:
             from achievements import achievements as achievements_manager
-            achievements_manager.unlock('first_win')
             # After unlocking, ensure the notifier has time to render the popup
             # before we return to the Start Menu. Run a short local loop that
             # updates/draws the notifier for a couple of seconds.
