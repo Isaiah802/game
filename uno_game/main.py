@@ -654,6 +654,10 @@ def player_setup(screen: pygame.Surface):
 
 
 def run_game_engine(screen: pygame.Surface, audio: AudioManager):
+    # Isaiah NPC pixel art (left side) -- only shown during setup, not in main gameplay
+    isaiah_npc = None
+    isaiah_states = []
+    isaiah_state_idx = 0
     """Runs the Zanzibar GameManager in interactive mode inside the pygame window.
 
     Controls:
@@ -671,17 +675,15 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     if not setup:
         return
     player_names, starting_chips = setup
-    
+    # Isaiah NPC is not shown after setup
+    isaiah_npc = None
     # Fade out before loading screen
     from ui.ui_utils import fade_transition
     fade_transition(screen, duration=0.3, fade_out=True)
-    
     # Show loading screen while preparing game
     show_loading_screen(screen, duration=2.5)
-    
     # Fade in after loading
     fade_transition(screen, duration=0.3, fade_out=False)
-    
     gm = GameManager(player_names, starting_chips, screen=screen)
     
     # Initialize game settings for keybindings
@@ -711,6 +713,7 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         ms = clock.tick(60)
         dt = ms / 1000.0
 
+        frame_changed = False
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -759,6 +762,13 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                         gm.play_round()
                     except Exception:
                         pass
+            elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                mx, my = pygame.mouse.get_pos()
+                npc_rect = pygame.Rect(isaiah_npc.pos[0], isaiah_npc.pos[1], isaiah_npc.size, isaiah_npc.size)
+                if npc_rect.collidepoint(mx, my):
+                    isaiah_state_idx = (isaiah_state_idx + 1) % len(isaiah_states)
+                    isaiah_npc.set_state(isaiah_states[isaiah_state_idx])
+                    frame_changed = True
 
         # If the game manager signalled the game ended (winner found), exit the
         # engine loop so control returns to the Start Menu instead of quitting.
@@ -999,6 +1009,9 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         current_player = player_names[current_player_idx]
         header = font.render(f'Current Player: {current_player} | Space: Roll | I: Inventory | S: Shop | Tab: Switch Player | Esc: Menu', True, (255, 255, 255))
         screen.blit(header, (20, 20))
+
+        # Isaiah NPC (left side) -- do not draw in main gameplay
+        # (removed from gameplay screen)
         
         # Show tooltip on hover over header
         mx, my = pygame.mouse.get_pos()
