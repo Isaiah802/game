@@ -5,6 +5,7 @@ from typing import Callable, Optional
 
 # Ensure this matches your file name for the sprite code
 from .Isaiah_npc import IsaiahNPCPixelArt
+from .red_avatar import RedHoodiePixelAvatar
 
 # ---------------------------------------------------------
 #               FRIEND'S CODE & HELPERS
@@ -283,6 +284,9 @@ class StartMenu:
             self.left_avatar_rect = pygame.Rect(lx, ly, av_w, av_h)
             
             self.left_avatar = IsaiahNPCPixelArt(pos=(lx, ly), size=64, scale=2)
+            # Right avatar: procedural pixel-art avatar
+            # larger pixel canvas gives more body/head detail
+            self.right_avatar = RedHoodiePixelAvatar(pixel_size=(24, 40), anim_rate=200)
 
     def reset_idle(self):
         self.idle_timer = 0.0
@@ -387,97 +391,23 @@ class StartMenu:
             # --- RIGHT AVATAR (FULL ORIGINAL CODE) ---
             if not is_ultimate:
                 ar = self.avatar_rect
-                panel = pygame.Surface(ar.size, pygame.SRCALPHA)
-                panel.fill((0, 0, 0, 70))
-                self.screen.blit(panel, ar.topleft)
+                # Draw right-side pixel avatar if available
+                if hasattr(self, 'right_avatar'):
+                    try:
+                        self.right_avatar.update()
+                        self.right_avatar.draw(self.screen, (ar.x, ar.y), (ar.width, ar.height))
+                    except Exception:
+                        # fallback: draw a dark panel if something fails
+                        panel = pygame.Surface(ar.size, pygame.SRCALPHA)
+                        panel.fill((0, 0, 0, 90))
+                        self.screen.blit(panel, ar.topleft)
+                else:
+                    # simple fallback panel
+                    panel = pygame.Surface(ar.size, pygame.SRCALPHA)
+                    panel.fill((0, 0, 0, 90))
+                    self.screen.blit(panel, ar.topleft)
 
-                # Geometry & Calculations
-                head_r = max(6, ar.width // 4)
-                head_x = ar.x + ar.width // 2
-                head_y = ar.y + head_r + 4
-                body_w = int(ar.width * 0.8)
-                body_h = int(ar.height * 0.30)
-                body_x = head_x - body_w // 2
-                body_y = head_y + head_r - 2
-                
-                # Legs
-                leg_w = int(body_w * 0.42)
-                leg_h = max(8, int(ar.height * 0.32))
-                leg_gap = max(2, int(body_w * 0.08))
-                leg1_x = head_x - leg_w - leg_gap//2
-                leg2_x = head_x + leg_gap//2
-                leg_y = body_y + body_h - 2
-                
-                # Arms
-                arm_w = max(4, int(body_w * 0.18))
-                arm_h = int(body_h * 0.9)
-                arm1_x = body_x - arm_w + 2
-                arm2_x = body_x + body_w - 2
-                arm_y = body_y + 2
-
-                # Colors
-                skin, hoodie, hoodie_outline = (255, 230, 180), (90, 0, 30), (50, 0, 15)
-                pants, outline = (30, 30, 40), (20, 20, 20)
-                hair_color, beard_color = (245, 220, 100), (180, 140, 80)
-
-                # Draw Head
-                pygame.draw.circle(self.screen, skin, (head_x, head_y), head_r)
-                pygame.draw.circle(self.screen, outline, (head_x, head_y), head_r, 1)
-                
-                # Hair
-                top_h = head_r + 6
-                top_rect = pygame.Rect(head_x - head_r - 2, head_y - head_r - 4, head_r * 2 + 4, top_h)
-                pygame.draw.ellipse(self.screen, hair_color, top_rect)
-                pygame.draw.ellipse(self.screen, (200,170,70), top_rect, 1)
-                band_h = head_r // 2 + 2
-                band_rect = pygame.Rect(head_x - head_r + 2, head_y - head_r//2, head_r * 2 - 4, band_h)
-                pygame.draw.rect(self.screen, hair_color, band_rect, border_radius=band_h//2)
-                pygame.draw.rect(self.screen, (200,170,70), band_rect, 1, border_radius=band_h//2)
-
-                # Face
-                eye_r = max(1, head_r // 5)
-                eye_y = head_y - eye_r
-                pygame.draw.circle(self.screen, (0,0,0), (head_x - eye_r*2, eye_y), eye_r)
-                pygame.draw.circle(self.screen, (0,0,0), (head_x + eye_r*2, eye_y), eye_r)
-
-                # Beard & Mouth
-                beard_height = head_r // 2 + 2
-                beard_rect = pygame.Rect(head_x - head_r + 3, head_y - 2, head_r*2 - 6, beard_height)
-                pygame.draw.rect(self.screen, beard_color, beard_rect, border_radius=head_r//2)
-                mouth_skin_r = max(3, head_r // 3)
-                pygame.draw.circle(self.screen, skin, (head_x, head_y + head_r//4), mouth_skin_r)
-                mouth_rect = pygame.Rect(head_x - mouth_skin_r, head_y + head_r//4 - mouth_skin_r//2, mouth_skin_r*2, mouth_skin_r)
-                pygame.draw.arc(self.screen, (0,0,0), mouth_rect, math.pi*0.15, math.pi - math.pi*0.15, 1)
-
-                # Hoodie Body
-                pygame.draw.rect(self.screen, hoodie, (body_x, body_y, body_w, body_h), border_radius=4)
-                pygame.draw.rect(self.screen, hoodie_outline, (body_x, body_y, body_w, body_h), 1, border_radius=4)
-                
-                # Pocket & Logo
-                pocket_w = int(body_w * 0.55)
-                pocket_h = int(body_h * 0.32)
-                pocket_x = head_x - pocket_w // 2
-                pocket_y = body_y + body_h - pocket_h - 4
-                pygame.draw.rect(self.screen, (110, 20, 40), (pocket_x, pocket_y, pocket_w, pocket_h), border_radius=3)
-                pygame.draw.rect(self.screen, (70, 10, 25), (pocket_x, pocket_y, pocket_w, pocket_h), 1, border_radius=3)
-                logo_font = pygame.font.SysFont('Arial', max(10, head_r))
-                logo = logo_font.render('A&M', True, (245,245,245))
-                logo_rect = logo.get_rect(center=(head_x, body_y + body_h * 0.35))
-                if logo_rect.width < body_w - 4:
-                    self.screen.blit(logo, logo_rect)
-
-                # Arms
-                pygame.draw.rect(self.screen, skin, (arm1_x, arm_y, arm_w, arm_h), border_radius=3)
-                pygame.draw.rect(self.screen, outline, (arm1_x, arm_y, arm_w, arm_h), 1, border_radius=3)
-                pygame.draw.rect(self.screen, skin, (arm2_x, arm_y, arm_w, arm_h), border_radius=3)
-                pygame.draw.rect(self.screen, outline, (arm2_x, arm_y, arm_w, arm_h), 1, border_radius=3)
-
-                # Legs
-                pygame.draw.rect(self.screen, pants, (leg1_x, leg_y, leg_w, leg_h), border_radius=3)
-                pygame.draw.rect(self.screen, outline, (leg1_x, leg_y, leg_w, leg_h), 1, border_radius=3)
-                pygame.draw.rect(self.screen, pants, (leg2_x, leg_y, leg_w, leg_h), border_radius=3)
-                pygame.draw.rect(self.screen, outline, (leg2_x, leg_y, leg_w, leg_h), 1, border_radius=3)
-                
+                # Hover glow and tip remain on top of avatar
                 if self.avatar_hover:
                     glow = pygame.Surface((ar.width+6, ar.height+6), pygame.SRCALPHA)
                     pygame.draw.rect(glow, (212,175,55,80), glow.get_rect(), border_radius=6)
@@ -526,7 +456,14 @@ class StartMenu:
                     self.Isaiah_npc_hover = self.left_avatar_rect.collidepoint(event.pos)
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if self.avatar_rect.collidepoint(event.pos):
+                        # Trigger coding animation for a short duration and also cycle rule snippet
                         self.current_rule_index = (self.current_rule_index + 1) % len(self.rule_snippets)
+                        if hasattr(self, 'right_avatar'):
+                            try:
+                                # first play a short sit-down transition then automatically go to the desk/setup
+                                self.right_avatar.set_state('transition', duration_ms=700)
+                            except Exception:
+                                pass
                     if self.left_avatar_rect.collidepoint(event.pos):
                         self.hint_cycle_pos += 1
                         if self.hint_cycle_pos >= len(self.hint_indices):
