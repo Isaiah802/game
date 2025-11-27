@@ -932,7 +932,13 @@ def main():
     # Show the intro/splash screen before the main menu
     try:
         from ui.intro_screen import IntroScreen
-        intro = IntroScreen(title='Zanzibar', subtitle='A Dice Game by I paid $1,152.60 to have this team name', duration=5.0)
+        intro = IntroScreen(
+                title='Zanzibar',
+                subtitle='A Dice Game by I paid $1,152.60 to have this team name',
+                duration=5.0,
+                use_roulette_table=True,
+                use_blank_background=False
+            )
         intro.run(screen)
     except Exception:
         # If intro fails for any reason, continue to the menu

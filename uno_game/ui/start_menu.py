@@ -221,6 +221,21 @@ class StartMenu:
 
     # Buttons will be created in build_ui
 
+        # Mini "lego" style avatar (initialize BEFORE build_ui so build_ui can reference it)
+        self.avatar_enabled = True
+        self.avatar_rect = pygame.Rect(0, 0, 1, 1)  # placeholder until buttons built
+        self.avatar_hover = False
+        self.rule_snippets = [
+            "Roll 5 dice.",
+            "Hands rank high to low.",
+            "Straights beat triples.",
+            "Reach 0 chips to win.",
+            "Items can alter rolls.",
+        ]
+        self.current_rule_index = 0
+        self.rule_cycle_timer = 0.0
+        self.rule_cycle_interval = 5.0
+
         # Buttons will be created in build_ui
         self.buttons = []
         self.build_ui()
@@ -253,6 +268,8 @@ class StartMenu:
         self.spotlight_drift_radius = 36.0
         self.spotlight_speed = 0.6
         self.spotlight_mouse_influence = 0.08
+
+        # (avatar vars already initialized above prior to build_ui)
 
     def build_ui(self):
         btn_w, btn_h = 360, 64
@@ -291,6 +308,22 @@ class StartMenu:
         # initialize hovered state
         for i, b in enumerate(self.buttons):
             b.hovered = (i == self.selected)
+        # After buttons are available, define a tiny avatar positioned just to the right of the Quit button
+        if self.avatar_enabled and self.buttons:
+            quit_rect = self.buttons[-1].rect
+            # Larger avatar dimensions for better detail (curly hair etc.)
+            av_w, av_h = 100, 160
+            gap = 12
+            x = quit_rect.right + gap
+            y = quit_rect.centery - av_h // 2
+            # Clamp inside window
+            if x + av_w > self.width - 8:
+                x = self.width - av_w - 8
+            if y < 8:
+                y = 8
+            if y + av_h > self.height - 8:
+                y = self.height - av_h - 8
+            self.avatar_rect = pygame.Rect(x, y, av_w, av_h)
 
     def draw(self):
         # felt background
@@ -350,6 +383,123 @@ class StartMenu:
         for b in self.buttons:
             b.draw(self.screen)
 
+        # Draw mini avatar beside Quit button (lego style with hoodie)
+        if self.avatar_enabled:
+            ar = self.avatar_rect
+            panel = pygame.Surface(ar.size, pygame.SRCALPHA)
+            panel.fill((0, 0, 0, 70))
+            self.screen.blit(panel, ar.topleft)
+
+            # Geometry
+            head_r = max(6, ar.width // 4)
+            head_x = ar.x + ar.width // 2
+            head_y = ar.y + head_r + 4
+            body_w = int(ar.width * 0.8)
+            body_h = int(ar.height * 0.30)
+            body_x = head_x - body_w // 2
+            body_y = head_y + head_r - 2
+            leg_w = int(body_w * 0.42)
+            leg_h = max(8, int(ar.height * 0.32))
+            leg_gap = max(2, int(body_w * 0.08))
+            leg1_x = head_x - leg_w - leg_gap//2
+            leg2_x = head_x + leg_gap//2
+            leg_y = body_y + body_h - 2
+            arm_w = max(4, int(body_w * 0.18))
+            arm_h = int(body_h * 0.9)
+            arm1_x = body_x - arm_w + 2
+            arm2_x = body_x + body_w - 2
+            arm_y = body_y + 2
+
+            # Colors
+            skin = (255, 230, 180)
+            hoodie = (90, 0, 30)
+            hoodie_outline = (50, 0, 15)
+            pants = (30, 30, 40)
+            outline = (20, 20, 20)
+            hair_color = (245, 220, 100)
+            beard_color = (180, 140, 80)
+
+            # Head + hair
+            pygame.draw.circle(self.screen, skin, (head_x, head_y), head_r)
+            pygame.draw.circle(self.screen, outline, (head_x, head_y), head_r, 1)
+            # Full straight hair (no curls): layered top + side coverage
+            # Top oval
+            top_h = head_r + 6
+            top_rect = pygame.Rect(head_x - head_r - 2, head_y - head_r - 4, head_r * 2 + 4, top_h)
+            pygame.draw.ellipse(self.screen, hair_color, top_rect)
+            pygame.draw.ellipse(self.screen, (200,170,70), top_rect, 1)
+            # Lower hair band to ensure full coverage around forehead
+            band_h = head_r // 2 + 2
+            band_rect = pygame.Rect(head_x - head_r + 2, head_y - head_r//2, head_r * 2 - 4, band_h)
+            pygame.draw.rect(self.screen, hair_color, band_rect, border_radius=band_h//2)
+            pygame.draw.rect(self.screen, (200,170,70), band_rect, 1, border_radius=band_h//2)
+
+            # Face (eyes)
+            eye_r = max(1, head_r // 5)
+            eye_y = head_y - eye_r
+            pygame.draw.circle(self.screen, (0,0,0), (head_x - eye_r*2, eye_y), eye_r)
+            pygame.draw.circle(self.screen, (0,0,0), (head_x + eye_r*2, eye_y), eye_r)
+
+            # Beard + mouth
+            beard_height = head_r // 2 + 2
+            beard_rect = pygame.Rect(head_x - head_r + 3, head_y - 2, head_r*2 - 6, beard_height)
+            pygame.draw.rect(self.screen, beard_color, beard_rect, border_radius=head_r//2)
+            mouth_skin_r = max(3, head_r // 3)
+            pygame.draw.circle(self.screen, skin, (head_x, head_y + head_r//4), mouth_skin_r)
+            mouth_rect = pygame.Rect(head_x - mouth_skin_r, head_y + head_r//4 - mouth_skin_r//2, mouth_skin_r*2, mouth_skin_r)
+            pygame.draw.arc(self.screen, (0,0,0), mouth_rect, math.pi*0.15, math.pi - math.pi*0.15, 1)
+
+            # Hoodie torso
+            pygame.draw.rect(self.screen, hoodie, (body_x, body_y, body_w, body_h), border_radius=4)
+            pygame.draw.rect(self.screen, hoodie_outline, (body_x, body_y, body_w, body_h), 1, border_radius=4)
+            pocket_w = int(body_w * 0.55)
+            pocket_h = int(body_h * 0.32)
+            pocket_x = head_x - pocket_w // 2
+            pocket_y = body_y + body_h - pocket_h - 4
+            pygame.draw.rect(self.screen, (110, 20, 40), (pocket_x, pocket_y, pocket_w, pocket_h), border_radius=3)
+            pygame.draw.rect(self.screen, (70, 10, 25), (pocket_x, pocket_y, pocket_w, pocket_h), 1, border_radius=3)
+            logo_font = pygame.font.SysFont('Arial', max(10, head_r))
+            logo = logo_font.render('A&M', True, (245,245,245))
+            logo_rect = logo.get_rect(center=(head_x, body_y + body_h * 0.35))
+            if logo_rect.width < body_w - 4:
+                self.screen.blit(logo, logo_rect)
+
+            # Arms
+            pygame.draw.rect(self.screen, skin, (arm1_x, arm_y, arm_w, arm_h), border_radius=3)
+            pygame.draw.rect(self.screen, outline, (arm1_x, arm_y, arm_w, arm_h), 1, border_radius=3)
+            pygame.draw.rect(self.screen, skin, (arm2_x, arm_y, arm_w, arm_h), border_radius=3)
+            pygame.draw.rect(self.screen, outline, (arm2_x, arm_y, arm_w, arm_h), 1, border_radius=3)
+
+            # Legs
+            pygame.draw.rect(self.screen, pants, (leg1_x, leg_y, leg_w, leg_h), border_radius=3)
+            pygame.draw.rect(self.screen, outline, (leg1_x, leg_y, leg_w, leg_h), 1, border_radius=3)
+            pygame.draw.rect(self.screen, pants, (leg2_x, leg_y, leg_w, leg_h), border_radius=3)
+            pygame.draw.rect(self.screen, outline, (leg2_x, leg_y, leg_w, leg_h), 1, border_radius=3)
+
+            # Hover glow + tooltip
+            if self.avatar_hover:
+                glow = pygame.Surface((ar.width+6, ar.height+6), pygame.SRCALPHA)
+                pygame.draw.rect(glow, (212,175,55,80), glow.get_rect(), border_radius=6)
+                self.screen.blit(glow, (ar.x-3, ar.y-3))
+                snippet = self.rule_snippets[self.current_rule_index]
+                tip_font = pygame.font.SysFont('Arial', 18)
+                tip_surf = tip_font.render(snippet, True, (245,245,245))
+                pad = 6
+                tip_w = tip_surf.get_width() + pad*2
+                tip_h = tip_surf.get_height() + pad*2
+                tip_x = ar.right + 10
+                tip_y = ar.y
+                if tip_x + tip_w > self.width - 6:
+                    tip_x = ar.x
+                    tip_y = ar.y - tip_h - 6
+                    if tip_y < 0:
+                        tip_y = ar.y + ar.height + 6
+                box = pygame.Surface((tip_w, tip_h), pygame.SRCALPHA)
+                box.fill((0,0,0,170))
+                pygame.draw.rect(box, (212,175,55), box.get_rect(), 1, border_radius=6)
+                self.screen.blit(box, (tip_x, tip_y))
+                self.screen.blit(tip_surf, (tip_x + pad, tip_y + pad))
+
         pygame.display.flip()
 
     def handle_events(self):
@@ -371,6 +521,14 @@ class StartMenu:
                 elif event.key == pygame.K_RETURN or event.key == pygame.K_KP_ENTER:
                     # trigger the selected button
                     self.buttons[self.selected].callback()
+            # avatar hover & click
+            if self.avatar_enabled:
+                if event.type == pygame.MOUSEMOTION:
+                    self.avatar_hover = self.avatar_rect.collidepoint(event.pos)
+                elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    if self.avatar_rect.collidepoint(event.pos):
+                        # advance rule snippet on click
+                        self.current_rule_index = (self.current_rule_index + 1) % len(self.rule_snippets)
 
     def run(self) -> str:
         """Run the menu loop until the user chooses an option; returns the choice key."""
@@ -387,6 +545,12 @@ class StartMenu:
                 self.update_dice(dt)
             if self.spotlight_enabled:
                 self.update_spotlight(dt)
+            # cycle rule snippet while hovered
+            if self.avatar_enabled and self.avatar_hover:
+                self.rule_cycle_timer += dt
+                if self.rule_cycle_timer >= self.rule_cycle_interval:
+                    self.rule_cycle_timer = 0.0
+                    self.current_rule_index = (self.current_rule_index + 1) % len(self.rule_snippets)
             self.draw()
         return self.result
 

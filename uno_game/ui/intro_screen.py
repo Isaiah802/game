@@ -42,7 +42,7 @@ class IntroScreen:
         self.tip_font_size = kwargs.get('tip_font_size', 16)
         
         # Skip settings
-        self.skippable = kwargs.get('skippable', True)
+        self.skippable = kwargs.get('skippable', False)
         self.min_display_time = kwargs.get('min_display_time', 0.25)
         self.tip_list = [
             "Tip: Press F to toggle fullscreen",
@@ -62,6 +62,10 @@ class IntroScreen:
         self.wheel_type = kwargs.get('wheel_type', 'american')
         # Option to force-draw a procedural casino background regardless of image
         self.force_draw_casino = kwargs.get('force_draw_casino', True)
+        # Allow a completely blank background (plain fill) bypassing images/procedural
+        self.use_blank_background = kwargs.get('use_blank_background', False)
+        # Optional: render a roulette table layout background similar to the reference
+        self.use_roulette_table = kwargs.get('use_roulette_table', True)
 
     def run(self, screen: pygame.Surface, audio_manager=None, load_work=None):
         """
@@ -294,6 +298,7 @@ class IntroScreen:
         running = True
         tip_idx = 0
         last_tip = time.time()
+        skip_prompt_shown_time = None
 
         # roulette wheel state (physics-like)
         wheel_angle = 0.0            # current rotation of wheel (radians)
@@ -349,7 +354,10 @@ class IntroScreen:
 
         # --- Ambient particle ambience ---
         star_particles = []
-        if casino_bg:
+        if self.use_blank_background:
+            # No ambience on blank background
+            star_particles = []
+        elif casino_bg:
             # warm floating glints for casino background
             star_count = 60
             for _ in range(star_count):
@@ -494,29 +502,104 @@ class IntroScreen:
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     raise SystemExit
-                elif event.type in (pygame.KEYDOWN, pygame.MOUSEBUTTONDOWN):
-                    if not self.skippable:
-                        # Show a quick pulse animation but don't skip
-                        state['pulse_start'] = now
-                        continue
-                        
-                    # Add a quick fade out animation
-                    state['fade_out_start'] = now
-                    state['manual_skip'] = True
-                    
-                    # Play a sound effect for the skip action
-                    if audio_manager is not None:
-                        try:
-                            skip_sfx_path = os.path.join(audio_manager.sfx_folder, 'mouse-click-290204.mp3')
-                            if os.path.exists(skip_sfx_path):
-                                skip_sound = pygame.mixer.Sound(skip_sfx_path)
-                                skip_sound.set_volume(audio_manager.get_sfx_volume() * 0.7)
-                                skip_sound.play()
-                        except Exception:
-                            pass
+                # Skip disabled: ignore key/mouse presses for skipping
 
             # draw background: prefer procedural casino if requested or image detected
-            if self.force_draw_casino or casino_bg:
+            if self.use_blank_background:
+                # Plain fill; optionally use provided bg_color (defaults to deep blue-black)
+                screen.fill(self.bg_color)
+            elif self.use_roulette_table:
+                # Draw a roulette table layout similar to the provided image
+                table_bg = (18, 90, 52)
+                screen.fill(table_bg)
+                # Table area
+                margin = int(min(width, height) * 0.06)
+                tbl_x = margin
+                tbl_y = margin
+                tbl_w = width - margin * 2
+                tbl_h = int(height * 0.6)
+                pygame.draw.rect(screen, (10, 60, 34), (tbl_x, tbl_y, tbl_w, tbl_h))
+                pygame.draw.rect(screen, (220, 220, 220), (tbl_x, tbl_y, tbl_w, tbl_h), 2)
+                # Grid: three rows (1-12, 13-24, 25-36) and left column for 0/00
+                left_col_w = int(tbl_w * 0.09)
+                cell_w = int((tbl_w - left_col_w) / 12)
+                cell_h = int(tbl_h / 3)
+                # Colors
+                red = (200, 20, 20)
+                black = (20, 20, 20)
+                green = (16, 120, 24)
+                label_font = pygame.font.SysFont(self.title_font_name, max(14, int(height * 0.03)))
+                num_font = pygame.font.SysFont(self.title_font_name, max(12, int(height * 0.028)))
+                # Left column: 0 and 00 stacked
+                left_rect = pygame.Rect(tbl_x, tbl_y, left_col_w, tbl_h)
+                pygame.draw.rect(screen, green, left_rect)
+                pygame.draw.rect(screen, (230,230,230), left_rect, 2)
+                zero_rect = pygame.Rect(tbl_x + 4, tbl_y + 4, left_col_w - 8, cell_h - 8)
+                dbl_zero_rect = pygame.Rect(tbl_x + 4, tbl_y + cell_h + 4, left_col_w - 8, cell_h * 2 - 12)
+                pygame.draw.rect(screen, green, zero_rect)
+                pygame.draw.rect(screen, green, dbl_zero_rect)
+                # labels for 0 and 00
+                z_s = num_font.render("0", True, (255,255,255))
+                z_r = z_s.get_rect(center=zero_rect.center)
+                screen.blit(z_s, z_r)
+                zz_s = num_font.render("00", True, (255,255,255))
+                zz_r = zz_s.get_rect(center=dbl_zero_rect.center)
+                screen.blit(zz_s, zz_r)
+                # European/US red set
+                red_set = {1,3,5,7,9,12,14,16,18,19,21,23,25,27,30,32,34,36}
+                # Draw numeric grid 1..36
+                for r in range(3):
+                    for c in range(12):
+                        n = r * 12 + (c + 1)
+                        x = tbl_x + left_col_w + c * cell_w
+                        y = tbl_y + r * cell_h
+                        rect = pygame.Rect(x, y, cell_w, cell_h)
+                        col = red if n in red_set else black
+                        pygame.draw.rect(screen, col, rect)
+                        pygame.draw.rect(screen, (230, 230, 230), rect, 2)
+                        ns = num_font.render(str(n), True, (255,255,255))
+                        nr = ns.get_rect(center=rect.center)
+                        screen.blit(ns, nr)
+                # Bottom betting labels strip
+                strip_h = int(height * 0.18)
+                strip_y = tbl_y + tbl_h + int(min(height * 0.04, margin))
+                strip_x = tbl_x
+                strip_w = tbl_w
+                pygame.draw.rect(screen, (12, 80, 34), (strip_x, strip_y, strip_w, strip_h))
+                pygame.draw.rect(screen, (220, 220, 220), (strip_x, strip_y, strip_w, strip_h), 2)
+                labels = [
+                    ("1st 12", 0.0, 0.33),
+                    ("2nd 12", 0.33, 0.66),
+                    ("3rd 12", 0.66, 1.0),
+                ]
+                # top row of labels
+                top_lab_h = int(strip_h * 0.5)
+                for text, a0, a1 in labels:
+                    lx = strip_x + int(strip_w * a0)
+                    lw = int(strip_w * (a1 - a0))
+                    lr = pygame.Rect(lx, strip_y, lw, top_lab_h)
+                    pygame.draw.rect(screen, (12, 80, 34), lr)
+                    pygame.draw.rect(screen, (220, 220, 220), lr, 2)
+                    ts = label_font.render(text, True, (255,255,255))
+                    tr = ts.get_rect(center=lr.center)
+                    screen.blit(ts, tr)
+                # bottom row: 1 to 18 | Even | Red | Black | Odd | 19 to 36
+                bottom_items = ["1 to 18", "Even", "Red", "Black", "Odd", "19 to 36"]
+                bi_w = int(strip_w / len(bottom_items))
+                for i, text in enumerate(bottom_items):
+                    lr = pygame.Rect(strip_x + i * bi_w, strip_y + top_lab_h, bi_w, strip_h - top_lab_h)
+                    base = (12, 80, 34)
+                    fill = base
+                    if text == "Red":
+                        fill = red
+                    elif text == "Black":
+                        fill = black
+                    pygame.draw.rect(screen, fill, lr)
+                    pygame.draw.rect(screen, (220, 220, 220), lr, 2)
+                    ts = label_font.render(text, True, (255,255,255))
+                    tr = ts.get_rect(center=lr.center)
+                    screen.blit(ts, tr)
+            elif self.force_draw_casino or casino_bg:
                 # draw full procedural casino background behind UI
                 try:
                     draw_casino_background()
@@ -1081,6 +1164,8 @@ class IntroScreen:
             tip_r = tip_surf.get_rect(center=(width // 2, bar_y + bar_h + 22))
             screen.blit(tip_surf, tip_r)
 
+            # Skip prompt removed
+
             # percent
             pct_surf = font_small.render(f"Loading... {int(frac * 100)}%", True, (220, 220, 220))
             screen.blit(pct_surf, (bar_x, bar_y - 26))
@@ -1149,8 +1234,8 @@ class IntroScreen:
                     except Exception:
                         pass
 
-            # break when loader is done and a minimal display time has passed
-            if state['done'] and elapsed >= min(self.duration, 0.25):
+            # break when loader is done and minimal display time has passed
+            if state['done'] and elapsed >= min(self.duration, self.min_display_time):
                 try:
                     if sfx_channel is not None:
                         sfx_channel.stop()
