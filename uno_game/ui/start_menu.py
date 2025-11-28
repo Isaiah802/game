@@ -190,7 +190,8 @@ class StartMenu:
             "Hi, I'm Isaiah!",              
             "Watch me slice these fruits!", 
             "Watch your chips carefully.",  
-            "Use items wisely to win.",     
+            "Use items wisely to win.",  
+            "Can you beat my high score?"   
         ]
         self.Isaiah_npc_index = 0
         self.Isaiah_npc_hover = False
@@ -200,7 +201,8 @@ class StartMenu:
             0: 'wave', 
             1: 'fruit_combo', 
             2: 'walk',
-            3: 'blink'
+            3: 'blink',
+            4: 'fruit_ninja'
         }
         self.hint_indices = list(range(len(self.Isaiah_npc_hints)))
         random.shuffle(self.hint_indices)
