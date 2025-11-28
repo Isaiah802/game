@@ -16,6 +16,7 @@ import os
 import sys
 import json
 import time
+import math
 import pygame
 import random
 from typing import Optional
@@ -32,6 +33,9 @@ from cards.card import create_dice_rolls
 from game.game_engine import GameManager
 from settings import Settings
 from items import registry
+from replay_system import GameReplay
+from stats_tracker import StatsTracker
+from theme_system import ThemeManager
 
 
 BASE_DIR = os.path.dirname(__file__)
@@ -40,6 +44,34 @@ SETTINGS_PATH = os.path.join(BASE_DIR, 'settings.json')
 
 # Cache for pre-rendered die sprites: {(size, face): Surface}
 DIE_SPRITE_CACHE = {}
+
+# Particle system for dice trails
+class DiceParticle:
+    def __init__(self, x, y, vx, vy, color, lifetime):
+        self.x = x
+        self.y = y
+        self.vx = vx
+        self.vy = vy
+        self.color = color
+        self.lifetime = lifetime
+        self.max_lifetime = lifetime
+        self.size = random.uniform(2, 5)
+    
+    def update(self, dt):
+        self.x += self.vx * dt
+        self.y += self.vy * dt
+        self.vy += 600 * dt  # gravity
+        self.vx *= 0.98  # air resistance
+        self.lifetime -= dt
+        return self.lifetime > 0
+    
+    def draw(self, surface):
+        alpha = int(255 * (self.lifetime / self.max_lifetime))
+        size = int(self.size * (self.lifetime / self.max_lifetime))
+        if size > 0:
+            s = pygame.Surface((size*2, size*2), pygame.SRCALPHA)
+            pygame.draw.circle(s, (*self.color, alpha), (size, size), size)
+            surface.blit(s, (int(self.x - size), int(self.y - size)))
 
 # Attempt to import the achievement notifier. If running with a different
 # cwd or from the package root, ensure the package path is available.
@@ -88,63 +120,103 @@ def save_settings(data: dict):
 
 
 def _render_die_sprite(size: int, face: int) -> pygame.Surface:
+    """Render a single die face with layered shading and cached result.
+
+    Visual goals (matching upgraded chips style):
+      - Soft drop shadow
+      - Beveled rim with gradient (light top-left, darker bottom-right)
+      - Subtle radial glow toward center
+      - Gloss highlight on upper-left quadrant
+      - Pips with inner shadow + micro highlight
+    """
     key = (size, face)
     if key in DIE_SPRITE_CACHE:
         return DIE_SPRITE_CACHE[key]
 
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
     rect = pygame.Rect(0, 0, size, size)
-    border_radius = max(4, size // 8)
+    border_radius = max(4, size // 7)
 
-    # shadow
+    # 1. Drop shadow (below face)
     shadow = pygame.Surface((size, size), pygame.SRCALPHA)
-    pygame.draw.ellipse(shadow, (0, 0, 0, 48), (size*0.08, size*0.7, size*0.84, size*0.24))
+    pygame.draw.ellipse(shadow, (0, 0, 0, 55), (size * 0.10, size * 0.72, size * 0.80, size * 0.26))
     surf.blit(shadow, (0, 0))
 
-    # base face with subtle bevel (drawn as two layered rects)
-    base_col = (245, 245, 245)
-    inner_col = (228, 228, 232)
+    # 2. Base face fill
+    base_col = (245, 245, 246)
     pygame.draw.rect(surf, base_col, rect, border_radius=border_radius)
-    inner = rect.inflate(-size*0.08, -size*0.08)
-    pygame.draw.rect(surf, inner_col, inner, border_radius=max(2, border_radius-2))
 
-    # top-left highlight
+    # 3. Rim / bevel gradient by inflating rect inward
+    rim_layers = max(5, size // 14)
+    for i in range(rim_layers):
+        t = i / rim_layers
+        # Light bias top-left, darker toward bottom-right
+        shade = 255 - int(28 * t)
+        col = (shade, shade, shade - 4)
+        inset = rect.inflate(-i * 2, -i * 2)
+        if inset.width <= 0 or inset.height <= 0:
+            break
+        pygame.draw.rect(surf, col, inset, border_radius=max(1, border_radius - i))
+
+    # 4. Inner face panel slightly cooler tone
+    inner = rect.inflate(-size * 0.14, -size * 0.14)
+    pygame.draw.rect(surf, (228, 230, 233), inner, border_radius=max(2, border_radius - 3))
+
+    # 5. Radial center glow (additive)
+    glow = pygame.Surface((size, size), pygame.SRCALPHA)
+    cx, cy = size / 2, size / 2
+    max_r = size * 0.48
+    steps = 18
+    for j in range(steps):
+        rt = j / steps
+        radius = max_r * (1 - rt * 0.85)
+        alpha = int(42 * (1 - rt) ** 1.8)
+        col = (255, 255, 255, alpha)
+        pygame.draw.circle(glow, col, (int(cx), int(cy)), int(radius))
+    surf.blit(glow, (0, 0), special_flags=pygame.BLEND_RGBA_ADD)
+
+    # 6. Directional highlight (upper-left) & shade (lower-right)
     hl = pygame.Surface((size, size), pygame.SRCALPHA)
-    pygame.draw.rect(hl, (255, 255, 255, 36), (0, 0, size, size//2), border_radius=border_radius)
+    pygame.draw.rect(hl, (255, 255, 255, 48), (0, 0, size, size * 0.55), border_radius=border_radius)
     surf.blit(hl, (0, 0))
+    shade = pygame.Surface((size, size), pygame.SRCALPHA)
+    pygame.draw.rect(shade, (0, 0, 0, 28), (0, size * 0.55, size, size * 0.50), border_radius=border_radius)
+    surf.blit(shade, (0, 0))
 
-    # pip helper with slight rim
+    # 7. Pips with rim, inner shadow, tiny gloss spot
     def pip(cx, cy, r):
-        # shadow rim
-        pygame.draw.circle(surf, (20, 20, 20, 120), (int(cx+1), int(cy+1)), r)
-        pygame.draw.circle(surf, (8, 8, 8), (int(cx), int(cy)), r-1)
-        # small glossy spot
-        if r >= 4:
-            pygame.draw.circle(surf, (255, 255, 255, 40), (int(cx - r*0.3), int(cy - r*0.3)), max(1, r//3))
+        # Pip drop shadow
+        pygame.draw.circle(surf, (0, 0, 0, 100), (int(cx + r * 0.22), int(cy + r * 0.22)), r)
+        # Main pip body
+        pygame.draw.circle(surf, (18, 18, 20), (int(cx), int(cy)), r)
+        inner_r = max(1, r - 2)
+        pygame.draw.circle(surf, (40, 40, 42), (int(cx), int(cy)), inner_r)
+        # Gloss
+        gloss_r = max(1, r // 3)
+        pygame.draw.circle(surf, (255, 255, 255, 90), (int(cx - r * 0.35), int(cy - r * 0.35)), gloss_r)
 
-    # pip layout relative to rect
     col_1 = size * 0.22
-    col_2 = size * 0.5
+    col_2 = size * 0.50
     col_3 = size * 0.78
     row_1 = size * 0.22
-    row_2 = size * 0.5
+    row_2 = size * 0.50
     row_3 = size * 0.78
-    r = max(2, size // 10)
+    pr = max(3, size // 11)
 
     if face in (1, 3, 5):
-        pip(col_2, row_2, r)
+        pip(col_2, row_2, pr)
     if face in (2, 3, 4, 5, 6):
-        pip(col_1, row_1, r)
-        pip(col_3, row_3, r)
+        pip(col_1, row_1, pr)
+        pip(col_3, row_3, pr)
     if face in (4, 5, 6):
-        pip(col_3, row_1, r)
-        pip(col_1, row_3, r)
+        pip(col_3, row_1, pr)
+        pip(col_1, row_3, pr)
     if face == 6:
-        pip(col_1, row_2, r)
-        pip(col_3, row_2, r)
+        pip(col_1, row_2, pr)
+        pip(col_3, row_2, pr)
 
-    # subtle border
-    pygame.draw.rect(surf, (30, 30, 30), rect, 1, border_radius=border_radius)
+    # 8. Outer border
+    pygame.draw.rect(surf, (32, 32, 34), rect, 1, border_radius=border_radius)
 
     DIE_SPRITE_CACHE[key] = surf
     return surf
@@ -182,50 +254,132 @@ def draw_die(surface: pygame.Surface, x: int, y: int, size: int, value: int):
             pip(col_3, row_2)
 
 
-def draw_die_flipping(surface: pygame.Surface, x: int, y: int, size: int, from_val: int, to_val: int, progress: float):
-    """Draw a die flipping from `from_val` to `to_val` where progress is 0..1.
-
-    The flip uses an X-scale shrink to mid-point and swaps face at 0.5.
+def draw_die_flipping(surface: pygame.Surface, x: int, y: int, size: int, from_val: int, to_val: int, progress: float, particles=None):
+    """Draw a die with realistic physics: 3D tumbling, bounce with deceleration, and particle trails.
+    
+    Enhanced physics:
+    - Multiple bounces with decreasing amplitude
+    - Velocity-based rotation (faster spin at start, slows down)
+    - 3D perspective scaling (die appears closer/further)
+    - Particle trail emission during movement
+    - Impact deformation on bounce
     """
-    # clamp and ease
     p = max(0.0, min(1.0, progress))
-    def ease(t):
-        return 3*t*t - 2*t*t*t
-    pe = ease(p)
-
-    # decide which face to display; swap to target at midpoint for a flip effect
-    if pe < 0.5:
-        face = from_val if from_val else random.randint(1, 6)
-    else:
+    
+    # Physics-based bounce with multiple rebounds
+    def realistic_bounce(t):
+        # Simulate multiple bounces with damping
+        if t < 0.3:  # Initial toss
+            phase = t / 0.3
+            return math.sin(phase * math.pi) * 1.2
+        elif t < 0.55:  # First bounce
+            phase = (t - 0.3) / 0.25
+            return math.sin(phase * math.pi) * 0.6
+        elif t < 0.75:  # Second bounce
+            phase = (t - 0.55) / 0.2
+            return math.sin(phase * math.pi) * 0.25
+        elif t < 0.9:  # Final settle bounce
+            phase = (t - 0.75) / 0.15
+            return math.sin(phase * math.pi) * 0.08
+        else:  # Settled
+            return 0.0
+    
+    # Velocity curve (fast at start, decelerates)
+    velocity = (1 - p) ** 1.5
+    
+    # Height with realistic bounce physics
+    bounce_height = realistic_bounce(p) * size * 1.5
+    y_offset = int(-bounce_height)
+    
+    # Rotation based on velocity (tumbling slows as it settles)
+    rotation_speed = 1080 * velocity + 360 * p  # Starts fast, adds base rotation
+    rotation = rotation_speed * p
+    
+    # 3D perspective: scale based on height (appears larger when higher)
+    height_scale = 1.0 + (bounce_height / (size * 3.0)) * 0.4
+    
+    # Impact squash on bounce (squash when hitting ground)
+    squash = 1.0
+    if p > 0.28 and p < 0.32:  # First impact
+        impact_progress = (p - 0.28) / 0.04
+        squash = 1.0 - 0.15 * math.sin(impact_progress * math.pi)
+    elif p > 0.53 and p < 0.56:  # Second impact
+        impact_progress = (p - 0.53) / 0.03
+        squash = 1.0 - 0.08 * math.sin(impact_progress * math.pi)
+    
+    # Emit particles during fast movement
+    if particles is not None and velocity > 0.3 and random.random() < 0.4:
+        trail_colors = [(255, 255, 255), (240, 240, 250), (220, 220, 240)]
+        for _ in range(random.randint(1, 3)):
+            px = x + size/2 + random.uniform(-size*0.3, size*0.3)
+            py = y + size/2 + y_offset + random.uniform(-size*0.2, size*0.2)
+            vx = random.uniform(-50, 50)
+            vy = random.uniform(-80, -20)
+            particles.append(DiceParticle(px, py, vx, vy, random.choice(trail_colors), random.uniform(0.3, 0.8)))
+    
+    # Face selection with rapid changes during tumble
+    tumble_speed = int(rotation / 90)  # Change face every 90 degrees
+    if p < 0.85:  # Still tumbling
+        face_sequence = [from_val, random.randint(1, 6), random.randint(1, 6), to_val]
+        face = face_sequence[tumble_speed % len(face_sequence)]
+    else:  # Settled on final value
         face = to_val if to_val else random.randint(1, 6)
-
-    # compute horizontal squash (width scales down toward 0 at mid-flip)
-    if pe < 0.5:
-        scale_x = 1.0 - (pe / 0.5)
-    else:
-        scale_x = (pe - 0.5) / 0.5
-
+    
+    # 3D rotation effects: squash horizontally based on rotation angle
+    angle_rad = math.radians(rotation % 360)
+    scale_x = abs(math.cos(angle_rad)) * height_scale
+    scale_y = height_scale * squash
+    
     w = max(6, int(size * scale_x))
-    cx = x + (size - w) // 2
+    h = int(size * scale_y)
 
-    try:
-        # get the face sprite and scale horizontally to simulate flip
-        spr = _render_die_sprite(size, face)
-        # when squashed to very small width, scale to at least 1 pixel to avoid errors
-        scaled = pygame.transform.smoothscale(spr, (max(1, w), size))
-        surface.blit(scaled, (cx, y))
-        # draw subtle border when visible
-        if w > 4:
-            pygame.draw.rect(surface, (30, 30, 30), pygame.Rect(cx, y, w, size), 1)
-    except Exception:
-        # fallback: draw a simple scaled rect
-        if w > 2:
-            rect = pygame.Rect(cx, y, w, size)
-            pygame.draw.rect(surface, (245, 245, 245), rect)
-            pygame.draw.rect(surface, (0, 0, 0), rect, 1)
-        else:
-            # tiny mid-flip line to hint at motion
-            pygame.draw.line(surface, (0,0,0), (x+size//2, y), (x+size//2, y+size), 2)
+    # Render the sprite for the current face
+    sprite = _render_die_sprite(size, face)
+
+    # Apply 3D perspective scaling
+    if w != size or h != size:
+        sprite = pygame.transform.scale(sprite, (w, h))
+
+    # Rotate the sprite with velocity-based tumbling
+    if rotation != 0:
+        sprite = pygame.transform.rotate(sprite, rotation)
+
+    # Dynamic shadow with realistic properties
+    shadow_alpha = int(120 * (1 - bounce_height / (size * 2)))  # Darker when closer to ground
+    shadow_size = int(size * (1 + bounce_height / (size * 4)))  # Larger when higher
+    shadow_blur = int(bounce_height / 5) + 2  # More blur when higher
+    
+    # Multi-layer shadow for soft blur effect
+    shadow_surf = pygame.Surface((shadow_size + shadow_blur*4, size // 2 + shadow_blur*2), pygame.SRCALPHA)
+    for blur_layer in range(shadow_blur):
+        alpha = shadow_alpha // (blur_layer + 2)
+        blur_size = shadow_size + blur_layer * 2
+        ellipse_rect = pygame.Rect(shadow_blur*2 - blur_layer, shadow_blur - blur_layer//2, blur_size, size // 2 + blur_layer)
+        pygame.draw.ellipse(shadow_surf, (0, 0, 0, alpha), ellipse_rect)
+    
+    surface.blit(shadow_surf, (int(x - shadow_blur*2), int(y + size - shadow_blur)))
+
+    # Motion blur effect during fast movement
+    if velocity > 0.5:
+        blur_alpha = int(60 * velocity)
+        blur_sprite = sprite.copy()
+        blur_sprite.set_alpha(blur_alpha)
+        blur_offset = int(velocity * 8)
+        blur_rect = blur_sprite.get_rect(center=(int(x + size / 2 - blur_offset), int(y + size / 2 + y_offset - blur_offset//2)))
+        surface.blit(blur_sprite, blur_rect)
+
+    # Draw the main die
+    die_rect = sprite.get_rect(center=(int(x + size / 2), int(y + size / 2 + y_offset)))
+    surface.blit(sprite, die_rect)
+    
+    # Glint effect on settling
+    if p > 0.88 and p < 0.95:
+        glint_progress = (p - 0.88) / 0.07
+        glint_alpha = int(180 * math.sin(glint_progress * math.pi))
+        glint_size = int(size * 0.3)
+        glint_surf = pygame.Surface((glint_size*2, glint_size*2), pygame.SRCALPHA)
+        pygame.draw.circle(glint_surf, (255, 255, 255, glint_alpha), (glint_size, glint_size), glint_size)
+        surface.blit(glint_surf, (int(x + size*0.2), int(y + y_offset + size*0.2)), special_flags=pygame.BLEND_RGBA_ADD)
 
 
 def run_dice_demo(screen: pygame.Surface, audio: AudioManager, num_dice: int = 10):
@@ -654,10 +808,6 @@ def player_setup(screen: pygame.Surface):
 
 
 def run_game_engine(screen: pygame.Surface, audio: AudioManager):
-    # Isaiah NPC pixel art (left side) -- only shown during setup, not in main gameplay
-    isaiah_npc = None
-    isaiah_states = []
-    isaiah_state_idx = 0
     """Runs the Zanzibar GameManager in interactive mode inside the pygame window.
 
     Controls:
@@ -666,8 +816,44 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     - S: Open shop menu
     - Esc: Return to menu
     """
+    # Isaiah NPC pixel art (left side) -- only shown during setup, not in main gameplay
+    isaiah_npc = None
+    isaiah_states = []
+    isaiah_state_idx = 0
     clock = pygame.time.Clock()
-    font = pygame.font.SysFont('Arial', 20)
+    
+    # Responsive scaling based on window size
+    def scale_ui(base_size, ref_width=900):
+        """Scale UI element based on current window width."""
+        return int(base_size * (screen.get_width() / ref_width))
+    
+    font_size = scale_ui(20)
+    header_font_size = scale_ui(18)
+    
+    # Cached surfaces (performance optimization)
+    cached_vignette = None
+    cached_felt_texture = None
+    cached_fonts = {}
+    
+    def get_font(size, bold=False):
+        """Get a cached font with current accessibility settings."""
+        font_family = 'Comic Sans MS' if dyslexia_font_mode else 'Arial'
+        key = ('general', size, bold, dyslexia_font_mode)
+        if key not in cached_fonts:
+            cached_fonts[key] = pygame.font.SysFont(font_family, size, bold=bold)
+        return cached_fonts[key]
+    
+    # Accessibility options
+    high_contrast_mode = False
+    dyslexia_font_mode = False
+    
+    # Particle system for dice effects
+    dice_particles = []
+    
+    # Initialize systems
+    theme_manager = ThemeManager(SETTINGS_PATH)
+    replay_system = GameReplay(os.path.join(BASE_DIR, 'replays'))
+    stats_tracker = StatsTracker(os.path.join(BASE_DIR, 'stats.json'))
 
     # For simplicity, player names and starting chips are provided before starting
     # the engine via a small pre-game form.
@@ -697,6 +883,12 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     round_message_end = 0.0
     # no animation: show improved 3D dice immediately when a round is played
     anim_duration = 0.8
+    # Dice roll animation state (for in-engine round rolls)
+    roll_anim_active = False
+    roll_anim_start_ms = 0
+    roll_anim_total_ms = 900
+    # Mapping player -> list of faces transitioning to final roll
+    roll_anim_from: dict[str, list[int]] = {}
     
     # Track current player (for shop/inventory)
     current_player_idx = 0
@@ -704,9 +896,25 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
     # Menu states
     show_inventory = False
     show_shop = False
+    show_settings_overlay = False
+    show_stats_overlay = False
+    show_replay_browser = False
+    show_theme_menu = False
+    # Replay playback state
+    replay_playing = False
+    replay_paused = True
+    replay_playback_timer = 0.0
+    replay_playback_index = 0
+    current_replay_info = None
     
     # Initialize status display
     status_display = StatusDisplay()
+    # Start recording the session
+    try:
+        replay_system.start_recording(player_names, starting_chips)
+        stats_tracker.record_game_start(player_names)
+    except Exception:
+        pass
     
     while running:
         # frame timing
@@ -719,6 +927,64 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                 pygame.quit()
                 sys.exit()
             elif event.type == pygame.KEYDOWN:
+                # Prioritize overlay interactions
+                if show_theme_menu:
+                    # Theme menu: number keys select themes, Esc closes
+                    if event.key in (pygame.K_ESCAPE, pygame.K_m):
+                        show_theme_menu = False
+                    elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
+                                       pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9):
+                        idx = (event.key - pygame.K_1)
+                        themes = theme_manager.list_themes()
+                        if 0 <= idx < len(themes):
+                            key_name = themes[idx][0]
+                            theme_manager.set_theme(key_name)
+                            notifier.show('Theme Applied', f"{themes[idx][1]}")
+                            show_theme_menu = False
+                    # consume overlay event
+                    continue
+                if show_replay_browser:
+                    # Replay browser interactions
+                    if event.key in (pygame.K_ESCAPE, pygame.K_l):
+                        show_replay_browser = False
+                        # stop any playback
+                        replay_playing = False
+                        replay_paused = True
+                        replay_playback_timer = 0.0
+                        replay_playback_index = 0
+                        current_replay_info = None
+                    elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5,
+                                       pygame.K_6, pygame.K_7, pygame.K_8, pygame.K_9):
+                        idx = (event.key - pygame.K_1)
+                        replays = replay_system.list_replays()
+                        if 0 <= idx < len(replays):
+                            filepath = replays[idx]['filepath']
+                            if replay_system.load_replay(filepath):
+                                replay_playing = True
+                                replay_paused = True
+                                replay_playback_timer = 0.0
+                                replay_playback_index = 0
+                                current_replay_info = replays[idx]
+                                notifier.show('Replay Loaded', replays[idx]['filename'])
+                    elif event.key == pygame.K_SPACE:
+                        # Toggle play/pause when a replay is loaded
+                        if replay_system.playback_data is not None:
+                            replay_paused = not replay_paused
+                            replay_playing = not replay_paused
+                    elif event.key == pygame.K_RIGHT:
+                        # Step forward one event
+                        if replay_system.playback_data is not None:
+                            ev = replay_system.get_next_event()
+                            if ev:
+                                notifier.show('Replay Event', f"{ev.get('type')}: {str(ev.get('data'))[:80]}")
+                    # consume overlay event
+                    continue
+                if show_stats_overlay:
+                    # Close stats overlay with Tab or Esc
+                    if event.key in (pygame.K_ESCAPE, pygame.K_TAB):
+                        show_stats_overlay = False
+                        continue
+                # Normal key handling
                 if event.key == pygame.K_ESCAPE:
                     running = False
                 elif event.key in (pygame.K_f, pygame.K_F11):
@@ -743,32 +1009,80 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
                         )
                     except Exception:
                         pass
-                    # Open inventory menu
+                elif event.key == pygame.K_i:
+                    # Open inventory menu (correct key per header/help text)
                     show_inventory = True
                 elif event.key == pygame.K_s:
                     # Open shop menu
                     show_shop = True
+                elif event.key == pygame.K_o:
+                    # Toggle settings overlay
+                    show_settings_overlay = not show_settings_overlay
                 elif event.key == pygame.K_TAB:
+                    # Quick open stats overview
+                    show_stats_overlay = not show_stats_overlay
+                elif event.key == pygame.K_l:
+                    # Open replay browser (L for 'replays')
+                    show_replay_browser = not show_replay_browser
+                elif event.key == pygame.K_m:
+                    # Theme menu (M)
+                    show_theme_menu = not show_theme_menu
                     # Switch current player
                     current_player_idx = (current_player_idx + 1) % len(player_names)
+                elif event.key in (pygame.K_1, pygame.K_2, pygame.K_3, pygame.K_4, pygame.K_5):
+                    # Quick use item from inventory
+                    key_map = {pygame.K_1: 0, pygame.K_2: 1, pygame.K_3: 2, pygame.K_4: 3, pygame.K_5: 4}
+                    slot = key_map[event.key]
+                    current_player = player_names[current_player_idx]
+                    player_data = gm.players[current_player]
+                    if 'inventory' in player_data and player_data['inventory']:
+                        items_list = list(player_data['inventory'].get_all_items().items())
+                        if slot < len(items_list):
+                            item_name, qty = items_list[slot]
+                            if gm.use_item(current_player, item_name):
+                                try:
+                                    audio.play_sound_effect('whoosh.mp3', volume=0.5)
+                                except Exception:
+                                    pass
                 elif event.key == pygame.K_SPACE:
-                    # Play a round immediately and show improved (3D) dice.
-                    # Play dice roll sound
+                    # Trigger dice roll animation transitioning to new round result
+                    # Play roll start whoosh
+                    try:
+                        audio.play_sound_effect('whoosh.mp3', volume=0.4)
+                    except Exception:
+                        pass
+                    # Schedule dice bounce sound mid-animation
                     try:
                         audio.play_sound_effect('dice_bounce.mp3', volume=0.6)
                     except Exception:
                         pass
+                    # Capture previous shown faces per player (random if none)
+                    roll_anim_from.clear()
+                    for name in gm.player_order:
+                        existing = gm.round_results.get(name, {}).get('final_roll') or [random.randint(1,6) for _ in range(3)]
+                        # shuffle to look different prior to final
+                        roll_anim_from[name] = [random.randint(1,6) for _ in existing]
+                    # Compute new round results immediately (logic not delayed)
                     try:
                         gm.play_round()
                     except Exception:
                         pass
+                    roll_anim_start_ms = pygame.time.get_ticks()
+                    roll_anim_active = True
             elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                 mx, my = pygame.mouse.get_pos()
-                npc_rect = pygame.Rect(isaiah_npc.pos[0], isaiah_npc.pos[1], isaiah_npc.size, isaiah_npc.size)
-                if npc_rect.collidepoint(mx, my):
-                    isaiah_state_idx = (isaiah_state_idx + 1) % len(isaiah_states)
-                    isaiah_npc.set_state(isaiah_states[isaiah_state_idx])
-                    frame_changed = True
+                # isaiah_npc is only available during setup; guard access to avoid
+                # AttributeError when it's None (clicks were closing the game).
+                if isaiah_npc is not None:
+                    try:
+                        npc_rect = pygame.Rect(isaiah_npc.pos[0], isaiah_npc.pos[1], isaiah_npc.size, isaiah_npc.size)
+                        if npc_rect.collidepoint(mx, my):
+                            isaiah_state_idx = (isaiah_state_idx + 1) % len(isaiah_states)
+                            isaiah_npc.set_state(isaiah_states[isaiah_state_idx])
+                            frame_changed = True
+                    except Exception:
+                        # Swallow any unexpected errors from npc structure
+                        pass
 
         # If the game manager signalled the game ended (winner found), exit the
         # engine loop so control returns to the Start Menu instead of quitting.
@@ -1004,10 +1318,43 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
             
             show_shop = False
 
-        # Draw the game state (flat fill)
-        screen.fill((40, 40, 60))
+        # Draw the game state with felt texture + vignette (cached)
+        # Apply theme colors (high-contrast overrides theme)
+        if high_contrast_mode:
+            felt_color = (0, 0, 0)
+        else:
+            felt_color = theme_manager.get_color('background', (12, 80, 34))
+        screen.fill(felt_color)
+        
+        # Diagonal texture overlay (cached)
+        if cached_felt_texture is None or cached_felt_texture.get_size() != screen.get_size():
+            tex_surf = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+            step = 14
+            for x in range(-screen.get_height(), screen.get_width(), step):
+                pygame.draw.line(tex_surf, (0, 0, 0, 18), (x, 0), (x + screen.get_height(), screen.get_height()), 1)
+            cached_felt_texture = tex_surf
+        screen.blit(cached_felt_texture, (0, 0))
+        
+        # Vignette (cached)
+        if cached_vignette is None or cached_vignette.get_size() != screen.get_size():
+            cached_vignette = _make_vignette(screen.get_width(), screen.get_height(), max_alpha=140)
+        screen.blit(cached_vignette, (0, 0))
+        
         current_player = player_names[current_player_idx]
-        header = font.render(f'Current Player: {current_player} | Space: Roll | I: Inventory | S: Shop | Tab: Switch Player | Esc: Menu', True, (255, 255, 255))
+        header_text = (
+            f'Current Player: {current_player} | Space: Roll | I: Inventory | S: Shop '
+            f'| L: Replays | Tab: Stats | M: Theme | O: Settings | H: Contrast | D: Dyslexia'
+        )
+        header_color = (0, 0, 0) if high_contrast_mode else (255, 255, 255)
+        
+        # Header font with dyslexia support
+        header_font_key = ('header', font_size, dyslexia_font_mode)
+        if header_font_key not in cached_fonts:
+            font_family = 'Comic Sans MS' if dyslexia_font_mode else 'Arial'
+            cached_fonts[header_font_key] = pygame.font.SysFont(font_family, font_size)
+        header_font = cached_fonts[header_font_key]
+        
+        header = header_font.render(header_text, True, header_color)
         screen.blit(header, (20, 20))
 
         # Isaiah NPC (left side) -- do not draw in main gameplay
@@ -1017,7 +1364,10 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         mx, my = pygame.mouse.get_pos()
         if my < 40:
             from ui.ui_utils import show_tooltip
-            tooltip_text = "Space: Roll dice | I: Open inventory | S: Shop for items | Tab: Switch player view | Esc: Return to menu"
+            tooltip_text = (
+                "Space: Roll dice | I: Inventory | S: Shop | L: Replays | Tab: Stats | "
+                "M: Theme | O: Settings | H: Contrast | D: Dyslexia | Esc: Return"
+            )
             show_tooltip(screen, tooltip_text, mx, my + 20)
 
         # show transient round message (winner) if present
@@ -1029,64 +1379,422 @@ def run_game_engine(screen: pygame.Surface, audio: AudioManager):
         else:
             round_message = None
 
-        # Render players and chips
-        y = 80
-        die_size = 36
-        spacing_x = 10
+        # Render players and chips in card-style panels
+        y = scale_ui(80)
+        die_size = scale_ui(36)
+        spacing_x = scale_ui(10)
+        chip_radius = scale_ui(8)
         from cards.chips import draw_chip_stack
 
+        panel_padding = scale_ui(12)
+        panel_margin = scale_ui(8)
+        card_width = screen.get_width() - scale_ui(40)
+        
         for i, name in enumerate(gm.player_order):
             chips = gm.players.get(name, {}).get('chips', 0)
-            
-            # Highlight current player
             is_current = (i == current_player_idx)
-            if is_current:
-                highlight_rect = pygame.Rect(10, y - 12, screen.get_width() - 20, 48)
-                pygame.draw.rect(screen, (80, 100, 120), highlight_rect, border_radius=8)
-                pygame.draw.rect(screen, (150, 180, 200), highlight_rect, 2, border_radius=8)
             
-            # draw chip stack at fixed left column, then render player text to the right of chips
-            stack_rect = draw_chip_stack(screen, 20, y - 6, chips, chip_radius=8, max_display=10, font=font)
-            try:
-                color = (255, 255, 120) if is_current else (230, 230, 230)
-                txt = font.render(f'{name}: {chips} chips', True, color)
-                screen.blit(txt, (stack_rect.right + 8, y))
-            except Exception:
-                pass
-
-            # Draw active effects for this player
+            # Calculate card height based on content (responsive)
+            result = gm.round_results.get(name)
+            has_dice = result is not None
+            card_height = scale_ui(70) if has_dice else scale_ui(50)
+            
+            # Draw card background with gold rim
+            card_rect = pygame.Rect(20, y - panel_padding, card_width, card_height)
+            
+            # Shadow
+            shadow_rect = card_rect.copy()
+            shadow_rect.x += 3
+            shadow_rect.y += 3
+            shadow_surf = pygame.Surface((shadow_rect.width, shadow_rect.height), pygame.SRCALPHA)
+            pygame.draw.rect(shadow_surf, (0, 0, 0, 60), shadow_surf.get_rect(), border_radius=10)
+            screen.blit(shadow_surf, shadow_rect)
+            
+            # Card base (darker for current player)
+            if high_contrast_mode:
+                card_color = (255, 255, 255) if is_current else (220, 220, 220)
+                rim_color = (0, 0, 0)
+            else:
+                card_color = theme_manager.get_color('card_base_current' if is_current else 'card_base', (35, 40, 50))
+                rim_color = theme_manager.get_color('card_rim_current' if is_current else 'card_rim', (180, 150, 60))
+            pygame.draw.rect(screen, card_color, card_rect, border_radius=10)
+            pygame.draw.rect(screen, rim_color, card_rect, 2, border_radius=10)
+            
+            # Inner highlight at top
+            highlight_rect = pygame.Rect(card_rect.x + 2, card_rect.y + 2, card_rect.width - 4, card_height // 3)
+            highlight_surf = pygame.Surface((highlight_rect.width, highlight_rect.height), pygame.SRCALPHA)
+            pygame.draw.rect(highlight_surf, (255, 255, 255, 12), highlight_surf.get_rect(), border_radius=8)
+            screen.blit(highlight_surf, highlight_rect)
+            
+            # Content layout (left to right: chips, name, effects, dice)
+            content_x = card_rect.x + panel_padding
+            content_y = card_rect.y + panel_padding + 4
+            
+            # draw chip stack (returns rect + metadata)
+            stack_rect, chip_metadata = draw_chip_stack(screen, content_x, content_y, chips, chip_radius=chip_radius, max_display=10, font=get_font(scale_ui(14)), time_ms=pygame.time.get_ticks())
+            
+            # Hover tooltip for chip stack using metadata
+            if stack_rect.collidepoint(mx, my):
+                # Use metadata directly instead of recalculating
+                denom_map = chip_metadata['denominations']
+                
+                # Build tooltip text
+                tooltip_lines = [f"Total: {chip_metadata['total']} chips", ""]
+                for d in sorted(denom_map.keys(), reverse=True):
+                    cnt = denom_map[d]
+                    if cnt > 0:
+                        tooltip_lines.append(f"{cnt}x {d} chips")
+                if chip_metadata['overflow'] > 0:
+                    tooltip_lines.append(f"(+{chip_metadata['overflow']} not shown)")
+                
+                # Draw tooltip
+                tooltip_font_key = ('tooltip', scale_ui(14))
+                if tooltip_font_key not in cached_fonts:
+                    cached_fonts[tooltip_font_key] = pygame.font.SysFont('Arial', scale_ui(14))
+                tooltip_font = cached_fonts[tooltip_font_key]
+                tooltip_bg = (40, 40, 50, 230)
+                tooltip_border = (220, 185, 75)
+                padding = scale_ui(8)
+                
+                # Calculate tooltip size
+                line_surfs = [tooltip_font.render(line, True, (255, 255, 255)) for line in tooltip_lines]
+                tooltip_width = max(s.get_width() for s in line_surfs) + padding * 2
+                tooltip_height = sum(s.get_height() for s in line_surfs) + padding * 2 + scale_ui(2) * (len(line_surfs) - 1)
+                
+                # Position tooltip near cursor
+                tooltip_x = min(mx + scale_ui(15), screen.get_width() - tooltip_width - 10)
+                tooltip_y = min(my + scale_ui(15), screen.get_height() - tooltip_height - 10)
+                
+                # Draw tooltip background
+                tooltip_surf = pygame.Surface((tooltip_width, tooltip_height), pygame.SRCALPHA)
+                pygame.draw.rect(tooltip_surf, tooltip_bg, tooltip_surf.get_rect(), border_radius=scale_ui(6))
+                pygame.draw.rect(tooltip_surf, tooltip_border, tooltip_surf.get_rect(), 2, border_radius=scale_ui(6))
+                screen.blit(tooltip_surf, (tooltip_x, tooltip_y))
+                
+                # Draw tooltip text
+                text_y = tooltip_y + padding
+                for surf in line_surfs:
+                    screen.blit(surf, (tooltip_x + padding, text_y))
+                    text_y += surf.get_height() + scale_ui(2)
+            
+            # Player name and chip count
+            name_x = stack_rect.right + scale_ui(12)
+            if high_contrast_mode:
+                color = (0, 0, 0) if is_current else (40, 40, 40)
+            else:
+                color = theme_manager.get_color('text_highlight' if is_current else 'text_secondary', (230, 230, 230))
+            # Cache fonts (with dyslexia mode support)
+            font_family = 'Comic Sans MS' if dyslexia_font_mode else 'Arial'
+            name_font_key = (scale_ui(22), is_current, dyslexia_font_mode)
+            if name_font_key not in cached_fonts:
+                cached_fonts[name_font_key] = pygame.font.SysFont(font_family, scale_ui(22), bold=is_current)
+            name_font = cached_fonts[name_font_key]
+            name_txt = name_font.render(name, True, color)
+            screen.blit(name_txt, (name_x, content_y - 2))
+            
+            chip_color = (0, 0, 0) if high_contrast_mode else (200, 200, 200)
+            chip_txt = get_font(scale_ui(16)).render(f'{chips} chips', True, chip_color)
+            screen.blit(chip_txt, (name_x, content_y + scale_ui(20)))
+            
+            # Draw active effects
             active_effects = gm.get_active_effects(name)
             if active_effects:
-                effects_x = stack_rect.right + 150
-                status_display.draw_player_effects(screen, name, active_effects, effects_x, y - 10, compact=True)
+                effects_x = name_x + scale_ui(180)
+                status_display.draw_player_effects(screen, name, active_effects, effects_x, content_y - 2, compact=True)
 
             # Render final roll if available
-            result = gm.round_results.get(name)
             if result:
                 final = result.get('final_roll', [])
-                for j, v in enumerate(final):
-                    x = 220 + j * (die_size + spacing_x)
-                    draw_die(screen, x, y - 6, die_size, v)
-                # render the computed hand name/score
+                dice_x = card_rect.right - (len(final) * (die_size + spacing_x)) - panel_padding
+                dice_y = content_y
+                
+                # Animate dice if active
+                if roll_anim_active:
+                    elapsed = pygame.time.get_ticks() - roll_anim_start_ms
+                    progress = min(1.0, elapsed / roll_anim_total_ms)
+                    from_faces = roll_anim_from.get(name, final)
+                    for j, to_val in enumerate(final):
+                        x = dice_x + j * (die_size + spacing_x)
+                        # per-die stagger for nicer feel
+                        stagger = j * 0.08
+                        p = max(0.0, min(1.0, (progress - stagger) / (1.0 - stagger)))
+                        draw_die_flipping(screen, x, dice_y, die_size, from_faces[j] if j < len(from_faces) else to_val, to_val, p, particles=dice_particles)
+                    if progress >= 1.0:
+                        roll_anim_active = False
+                        # Play completion tick
+                        try:
+                            audio.play_sound_effect('mouse-click-290204.mp3', volume=0.5)
+                        except Exception:
+                            pass
+                else:
+                    for j, v in enumerate(final):
+                        x = dice_x + j * (die_size + spacing_x)
+                        draw_die(screen, x, dice_y, die_size, v)
+                
+                # render the computed hand name/score (below name)
                 score_info = GameManager._calculate_score(final)
                 try:
-                    score_txt = font.render(score_info.get('name', ''), True, (200, 200, 120))
-                    screen.blit(score_txt, (220, y + 18))
+                    score_color = (0, 0, 0) if high_contrast_mode else (220, 200, 100)
+                    score_txt = get_font(scale_ui(14)).render(score_info.get('name', ''), True, score_color)
+                    screen.blit(score_txt, (name_x, content_y + scale_ui(38)))
                 except Exception:
                     pass
   
-            y += 50
+            y += card_height + panel_margin
 
         # No rolling animation: improvements to die visuals are shown directly
+        
+        # Draw inventory quick bar at bottom
+        current_player = player_names[current_player_idx]
+        player_data = gm.players[current_player]
+        if 'inventory' in player_data and player_data['inventory']:
+            items_list = list(player_data['inventory'].get_all_items().items())[:5]
+            if items_list:
+                bar_height = scale_ui(60)
+                bar_y = screen.get_height() - bar_height - scale_ui(10)
+                bar_x = scale_ui(10)
+                slot_width = scale_ui(90)
+                slot_spacing = scale_ui(8)
+                
+                for idx, (item_name, qty) in enumerate(items_list):
+                    slot_x = bar_x + idx * (slot_width + slot_spacing)
+                    slot_rect = pygame.Rect(slot_x, bar_y, slot_width, bar_height)
+                    
+                    # Slot background
+                    slot_surf = pygame.Surface((slot_width, bar_height), pygame.SRCALPHA)
+                    if high_contrast_mode:
+                        bg_color = (255, 255, 255, 240)
+                        border_color = (0, 0, 0)
+                    else:
+                        bg_color = (35, 40, 50, 220)
+                        border_color = (180, 150, 60)
+                    pygame.draw.rect(slot_surf, bg_color, slot_surf.get_rect(), border_radius=scale_ui(8))
+                    pygame.draw.rect(slot_surf, border_color, slot_surf.get_rect(), 2, border_radius=scale_ui(8))
+                    screen.blit(slot_surf, slot_rect)
+                    
+                    # Item name (shortened)
+                    font_family = 'Comic Sans MS' if dyslexia_font_mode else 'Arial'
+                    item_font_key = ('item', scale_ui(12), dyslexia_font_mode)
+                    if item_font_key not in cached_fonts:
+                        cached_fonts[item_font_key] = pygame.font.SysFont(font_family, scale_ui(12), bold=True)
+                    item_font = cached_fonts[item_font_key]
+                    short_name = item_name[:10] + '..' if len(item_name) > 10 else item_name
+                    text_color = (0, 0, 0) if high_contrast_mode else (230, 230, 230)
+                    name_surf = item_font.render(short_name, True, text_color)
+                    name_rect = name_surf.get_rect(centerx=slot_rect.centerx, top=slot_rect.top + scale_ui(6))
+                    screen.blit(name_surf, name_rect)
+                    
+                    # Quantity
+                    qty_color = (40, 40, 40) if high_contrast_mode else (200, 200, 200)
+                    qty_surf = item_font.render(f'x{qty}', True, qty_color)
+                    qty_rect = qty_surf.get_rect(centerx=slot_rect.centerx, top=name_rect.bottom + scale_ui(2))
+                    screen.blit(qty_surf, qty_rect)
+                    
+                    # Key number
+                    key_font_key = ('key', scale_ui(16), dyslexia_font_mode)
+                    if key_font_key not in cached_fonts:
+                        cached_fonts[key_font_key] = pygame.font.SysFont(font_family, scale_ui(16), bold=True)
+                    key_font = cached_fonts[key_font_key]
+                    key_color = (0, 0, 0) if high_contrast_mode else (220, 185, 75)
+                    key_surf = key_font.render(str(idx + 1), True, key_color)
+                    key_rect = key_surf.get_rect(centerx=slot_rect.centerx, bottom=slot_rect.bottom - scale_ui(4))
+                    screen.blit(key_surf, key_rect)
+                    
+                    # Hover highlight
+                    if slot_rect.collidepoint(mx, my):
+                        highlight_surf = pygame.Surface((slot_width, bar_height), pygame.SRCALPHA)
+                        pygame.draw.rect(highlight_surf, (255, 255, 255, 30), highlight_surf.get_rect(), border_radius=scale_ui(8))
+                        screen.blit(highlight_surf, slot_rect)
 
+        # Settings overlay (press O)
+        if show_settings_overlay:
+            overlay_w = scale_ui(380)
+            overlay_h = scale_ui(340)
+            overlay_x = (screen.get_width() - overlay_w) // 2
+            overlay_y = (screen.get_height() - overlay_h) // 2
+            overlay_rect = pygame.Rect(overlay_x, overlay_y, overlay_w, overlay_h)
+            
+            # Semi-transparent background
+            overlay_surf = pygame.Surface((overlay_w, overlay_h), pygame.SRCALPHA)
+            pygame.draw.rect(overlay_surf, (25, 30, 40, 240), overlay_surf.get_rect(), border_radius=scale_ui(12))
+            pygame.draw.rect(overlay_surf, (220, 185, 75), overlay_surf.get_rect(), 3, border_radius=scale_ui(12))
+            screen.blit(overlay_surf, overlay_rect)
+            
+            # Title
+            font_family = 'Comic Sans MS' if dyslexia_font_mode else 'Arial'
+            title_font_key = ('settings_title', scale_ui(24), dyslexia_font_mode)
+            if title_font_key not in cached_fonts:
+                cached_fonts[title_font_key] = pygame.font.SysFont(font_family, scale_ui(24), bold=True)
+            title_font = cached_fonts[title_font_key]
+            title_surf = title_font.render('Quick Settings', True, (255, 255, 255))
+            title_rect = title_surf.get_rect(centerx=overlay_rect.centerx, top=overlay_rect.top + scale_ui(15))
+            screen.blit(title_surf, title_rect)
+            
+            # Labels and values
+            label_font_key = ('settings_label', scale_ui(16), dyslexia_font_mode)
+            if label_font_key not in cached_fonts:
+                cached_fonts[label_font_key] = pygame.font.SysFont(font_family, scale_ui(16))
+            label_font = cached_fonts[label_font_key]
+            
+            y_pos = overlay_rect.top + scale_ui(60)
+            
+            # Music volume
+            music_vol = audio.get_music_volume() if hasattr(audio, 'get_music_volume') else 0.6
+            music_label = label_font.render(f'Music: {int(music_vol * 100)}%', True, (230, 230, 230))
+            screen.blit(music_label, (overlay_rect.x + scale_ui(20), y_pos))
+            
+            # SFX volume
+            y_pos += scale_ui(50)
+            sfx_vol = audio.sfx_volume if hasattr(audio, 'sfx_volume') else 1.0
+            sfx_label = label_font.render(f'SFX: {int(sfx_vol * 100)}%', True, (230, 230, 230))
+            screen.blit(sfx_label, (overlay_rect.x + scale_ui(20), y_pos))
+            
+            # Animation toggle
+            y_pos += scale_ui(50)
+            anim_status = 'ON' if roll_anim_total_ms > 0 else 'OFF'
+            anim_label = label_font.render(f'Animations: {anim_status}', True, (230, 230, 230))
+            screen.blit(anim_label, (overlay_rect.x + scale_ui(20), y_pos))
+            
+            # High contrast mode
+            y_pos += scale_ui(40)
+            contrast_status = 'ON' if high_contrast_mode else 'OFF'
+            contrast_color = (0, 255, 0) if high_contrast_mode else (230, 230, 230)
+            contrast_label = label_font.render(f'High Contrast (H): {contrast_status}', True, contrast_color)
+            screen.blit(contrast_label, (overlay_rect.x + scale_ui(20), y_pos))
+            
+            # Dyslexia font mode
+            y_pos += scale_ui(40)
+            dyslexia_status = 'ON' if dyslexia_font_mode else 'OFF'
+            dyslexia_color = (0, 255, 0) if dyslexia_font_mode else (230, 230, 230)
+            dyslexia_label = label_font.render(f'Dyslexia Font (D): {dyslexia_status}', True, dyslexia_color)
+            screen.blit(dyslexia_label, (overlay_rect.x + scale_ui(20), y_pos))
+            
+            # Instructions
+            y_pos += scale_ui(40)
+            inst_font_key = ('settings_inst', scale_ui(12), dyslexia_font_mode)
+            if inst_font_key not in cached_fonts:
+                font_family = 'Comic Sans MS' if dyslexia_font_mode else 'Arial'
+                cached_fonts[inst_font_key] = pygame.font.SysFont(font_family, scale_ui(12))
+            inst_font = cached_fonts[inst_font_key]
+            inst_text = 'Press O to close | Use main Settings menu for full control'
+            inst_surf = inst_font.render(inst_text, True, (180, 180, 180))
+            inst_rect = inst_surf.get_rect(centerx=overlay_rect.centerx, top=y_pos)
+            screen.blit(inst_surf, inst_rect)
+        
+        # Update and draw dice particles
+        dt = clock.get_time() / 1000.0  # Convert to seconds
+        dice_particles[:] = [p for p in dice_particles if p.update(dt)]
+        for particle in dice_particles:
+            particle.draw(screen)
+        
         # draw any queued achievement popups (non-blocking)
         try:
             notifier.update()
             notifier.draw(screen)
         except Exception:
             pass
-        pygame.display.flip()
-        clock.tick(60)
+
+        # Draw overlays after flip content but before next frame
+        if show_stats_overlay:
+            try:
+                # Semi-transparent overlay
+                overlay = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 160))
+                screen.blit(overlay, (0, 0))
+                # Render summary
+                summary = stats_tracker.get_summary()
+                title_font = get_font(scale_ui(22), bold=True)
+                body_font = get_font(scale_ui(16))
+                title = title_font.render('Statistics Summary', True, theme_manager.get_color('text_primary'))
+                screen.blit(title, (scale_ui(40), scale_ui(60)))
+                lines = [
+                    f"Total Games: {summary['total_games']}",
+                    f"Total Rounds: {summary['total_rounds']}",
+                    f"Total Playtime: {int(summary['total_playtime'])}s",
+                ]
+                y = scale_ui(110)
+                for line in lines:
+                    surf = body_font.render(line, True, theme_manager.get_color('text_secondary'))
+                    screen.blit(surf, (scale_ui(40), y))
+                    y += scale_ui(28)
+            except Exception:
+                pass
+
+        if show_theme_menu:
+            try:
+                overlay = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 180))
+                screen.blit(overlay, (0, 0))
+                menu_w = scale_ui(520)
+                menu_h = scale_ui(360)
+                menu_x = (screen.get_width() - menu_w)//2
+                menu_y = (screen.get_height() - menu_h)//2
+                menu_rect = pygame.Rect(menu_x, menu_y, menu_w, menu_h)
+                pygame.draw.rect(screen, theme_manager.get_color('card_base'), menu_rect, border_radius=scale_ui(8))
+                pygame.draw.rect(screen, theme_manager.get_color('card_rim'), menu_rect, 2, border_radius=scale_ui(8))
+                title_font = get_font(scale_ui(20), bold=True)
+                title = title_font.render('Theme Selector (press number to apply)', True, theme_manager.get_color('text_primary'))
+                screen.blit(title, (menu_x + scale_ui(20), menu_y + scale_ui(16)))
+                y = menu_y + scale_ui(56)
+                idx = 1
+                for key, name in theme_manager.list_themes():
+                    line = f"{idx}. {name}  ({key})"
+                    surf = get_font(scale_ui(16)).render(line, True, theme_manager.get_color('text_secondary'))
+                    screen.blit(surf, (menu_x + scale_ui(24), y))
+                    y += scale_ui(30)
+                    idx += 1
+            except Exception:
+                pass
+
+        if show_replay_browser:
+            try:
+                overlay = pygame.Surface((screen.get_width(), screen.get_height()), pygame.SRCALPHA)
+                overlay.fill((0, 0, 0, 200))
+                screen.blit(overlay, (0, 0))
+                menu_w = scale_ui(640)
+                menu_h = scale_ui(420)
+                menu_x = (screen.get_width() - menu_w)//2
+                menu_y = (screen.get_height() - menu_h)//2
+                menu_rect = pygame.Rect(menu_x, menu_y, menu_w, menu_h)
+                pygame.draw.rect(screen, theme_manager.get_color('card_base'), menu_rect, border_radius=scale_ui(8))
+                pygame.draw.rect(screen, theme_manager.get_color('card_rim'), menu_rect, 2, border_radius=scale_ui(8))
+                title = get_font(scale_ui(20), bold=True).render('Replays', True, theme_manager.get_color('text_primary'))
+                screen.blit(title, (menu_x + scale_ui(18), menu_y + scale_ui(12)))
+                # List replays
+                replays = replay_system.list_replays()
+                y = menu_y + scale_ui(50)
+                idx = 1
+                for r in replays[:12]:
+                    info = f"{idx}. {r.get('filename')} - rounds: {r.get('rounds')} winner: {r.get('winner')}"
+                    surf = get_font(scale_ui(14)).render(info, True, theme_manager.get_color('text_secondary'))
+                    screen.blit(surf, (menu_x + scale_ui(18), y))
+                    y += scale_ui(28)
+                    idx += 1
+                if not replays:
+                    surf = get_font(scale_ui(14)).render('No replays found.', True, theme_manager.get_color('text_secondary'))
+                    screen.blit(surf, (menu_x + scale_ui(18), y))
+                # If a replay is loaded and playback is active, advance events by timer
+                if replay_playing and not replay_paused and replay_system.playback_data is not None:
+                    replay_playback_timer += dt
+                    events = replay_system.playback_data.get('events', [])
+                    # Dispatch events whose timestamp <= timer
+                    while replay_playback_index < len(events) and events[replay_playback_index]['timestamp'] <= replay_playback_timer:
+                        ev = replay_system.get_next_event()
+                        if ev:
+                            notifier.show('Replay Event', f"{ev.get('type')}: {str(ev.get('data'))[:120]}")
+                        replay_playback_index += 1
+                # Show loaded replay status
+                status_y = menu_y + menu_h - scale_ui(48)
+                if current_replay_info:
+                    st = get_font(scale_ui(14)).render(f"Loaded: {current_replay_info.get('filename')} | Play: Space | Step: → | Close: Esc", True, theme_manager.get_color('text_secondary'))
+                    screen.blit(st, (menu_x + scale_ui(18), status_y))
+            except Exception:
+                pass
+        # After drawing overlays, flip to show them
+        try:
+            pygame.display.flip()
+        except Exception:
+            pass
 
 def main():
     pygame.init()

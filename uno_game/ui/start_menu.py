@@ -14,18 +14,101 @@ from .red_avatar import RedHoodiePixelAvatar
 _chip_surface_cache: dict = {}
 
 def _get_chip_surface(color: tuple, radius: float) -> pygame.Surface:
-    key = (color, int(radius))
+    """Return a cached fancy poker-style chip surface with:
+    - Gold rim with subtle gradient & specular highlight
+    - Alternating stripe segments (white) on rim
+    - Inner colored disk with radial darkening
+    - Center highlight
+    - Optional denomination text derived from color
+    """
+    denom_map = {
+        (180, 30, 30): '50',    # red
+        (30, 90, 30): '25',     # green
+        (40, 40, 120): '100',   # blue
+        (80, 40, 10): '5',      # brown
+    }
+    key = (color, int(radius), 'v2')  # version tag to avoid stale cache
     if key in _chip_surface_cache:
         return _chip_surface_cache[key]
-    size = int(radius * 2 + 4)
+
+    size = int(radius * 2 + 6)
     surf = pygame.Surface((size, size), pygame.SRCALPHA)
-    center = (size // 2, size // 2)
-    rim_color = (212, 175, 55)
-    pygame.draw.circle(surf, rim_color, center, int(radius))
-    inner_r = max(1, int(radius * 0.82))
-    pygame.draw.circle(surf, color, center, inner_r)
-    center_r = max(1, int(radius * 0.14))
-    pygame.draw.circle(surf, (245, 245, 245, 200), center, center_r)
+    cx = size // 2
+    cy = size // 2
+    r = int(radius)
+
+    rim_base = (212, 175, 55)
+    rim_dark = (140, 110, 30)
+    rim_light = (245, 220, 120)
+
+    # Draw rim with vertical gradient
+    for yy in range(-r, r+1):
+        for xx in range(-r, r+1):
+            dist = (xx*xx + yy*yy) ** 0.5
+            if r-1 <= dist <= r:
+                t = (yy + r) / (2*r)  # 0..1 top->bottom
+                # interpolate rim colors
+                cr = int(rim_base[0] + (rim_dark[0]-rim_base[0]) * t)
+                cg = int(rim_base[1] + (rim_dark[1]-rim_base[1]) * t)
+                cb = int(rim_base[2] + (rim_dark[2]-rim_base[2]) * t)
+                surf.set_at((cx+xx, cy+yy), (cr, cg, cb, 255))
+
+    # Rim highlight arc (specular)
+    for ang_deg in range(-40, 41, 2):
+        ang = math.radians(ang_deg)
+        hx = int(cx + math.cos(ang)*r)
+        hy = int(cy - math.sin(ang)*r*0.85)
+        if 0 <= hx < size and 0 <= hy < size:
+            surf.set_at((hx, hy), rim_light)
+
+    # Stripe segments (8 evenly spaced)
+    stripe_count = 8
+    stripe_w = max(1, r // 6)
+    stripe_r0 = r - 1
+    stripe_r1 = r - max(2, r//4)
+    for i in range(stripe_count):
+        a0 = (2*math.pi * i) / stripe_count
+        for rr in range(stripe_r1, stripe_r0+1):
+            for sw in range(-stripe_w, stripe_w+1):
+                ang = a0 + (sw / (stripe_w*4))
+                px = int(cx + math.cos(ang)*rr)
+                py = int(cy + math.sin(ang)*rr)
+                if 0 <= px < size and 0 <= py < size:
+                    surf.set_at((px, py), (245, 245, 245, 255))
+
+    # Inner colored disk with radial darkening
+    inner_r = int(r * 0.78)
+    for yy in range(-inner_r, inner_r+1):
+        for xx in range(-inner_r, inner_r+1):
+            dist = (xx*xx + yy*yy) ** 0.5
+            if dist <= inner_r:
+                t = dist / inner_r  # 0 center ->1 edge
+                darken = 0.35 * t
+                cr = int(color[0] * (1 - darken))
+                cg = int(color[1] * (1 - darken))
+                cb = int(color[2] * (1 - darken))
+                surf.set_at((cx+xx, cy+yy), (cr, cg, cb, 255))
+
+    # Center highlight
+    center_r = max(2, int(r * 0.22))
+    for yy in range(-center_r, center_r+1):
+        for xx in range(-center_r, center_r+1):
+            if xx*xx + yy*yy <= center_r*center_r:
+                # subtle soft white
+                surf.set_at((cx+xx, cy+yy), (250, 250, 250, 200))
+
+    # Denomination text
+    denom = denom_map.get(color)
+    if denom:
+        font_size = max(10, int(r * 0.9))
+        try:
+            font = pygame.font.SysFont('Arial', font_size, bold=True)
+            txt = font.render(denom, True, (30, 30, 30))
+            tr = txt.get_rect(center=(cx, cy))
+            surf.blit(txt, tr)
+        except Exception:
+            pass
+
     _chip_surface_cache[key] = surf
     return surf
 
@@ -98,11 +181,17 @@ class ChipParticle:
         return self.y - self.radius > height
 
     def draw(self, surface: pygame.Surface) -> None:
-        surf = _get_chip_surface(self.color, self.radius)
+        base = _get_chip_surface(self.color, self.radius)
+        # rotation based on horizontal velocity and vertical position
+        rot = (self.x * 4 + self.y * 2 + self.vx * 25) % 360
+        s = pygame.transform.rotate(base, rot)
         alpha = int(max(60, min(255, 255 * (1.0 - (self.y / (surface.get_height() + 100.0))))))
-        s = surf.copy()
         s.set_alpha(alpha)
         rect = s.get_rect(center=(int(self.x), int(self.y)))
+        # Drop shadow slightly offset
+        shadow = pygame.Surface(rect.size, pygame.SRCALPHA)
+        pygame.draw.circle(shadow, (0,0,0,90), (shadow.get_width()//2 + 2, shadow.get_height()//2 + 4), int(self.radius))
+        surface.blit(shadow, (rect.x, rect.y))
         surface.blit(s, rect)
 
 class DiceParticle:

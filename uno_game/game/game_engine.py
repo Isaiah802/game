@@ -378,8 +378,11 @@ class GameManager(FoodDrinkMixin):
             player_data['active_effects'] = {}
             
         for effect in item.effects:
-            player_data['active_effects'][effect] = item.duration
-            print(f"[EFFECT] {player_name} gained {effect.value} for {item.duration} turns!")
+            # Stack duration instead of overwrite to match inventory behavior
+            current = player_data['active_effects'].get(effect, 0)
+            stacked = current + item.duration
+            player_data['active_effects'][effect] = stacked
+            print(f"[EFFECT] {player_name} gained {effect.value} (now {stacked} turns)!")
         
         # Check item-related achievements
         try:

@@ -347,6 +347,63 @@ class RedHoodiePixelAvatar:
         for px in range(pocket_x, pocket_x + pocket_w):
             self._set_px(surf, px, pocket_y, p['trim'])
 
+        # White A&M logo centered on chest above the pocket.
+        # Draw with compact pixel lettering: "A&M"
+        logo_color = p.get('accent', (255, 255, 255))
+        # Make letters smaller by targeting a narrower logo width
+        logo_w = max(6, body_w // 4)
+        logo_x = body_x + (body_w - logo_w)//2
+        # Place lower on torso so it's on the hoodie, not the face
+        # Roughly one-third down from top of body
+        logo_y = body_y + max(2, body_h // 3)
+        # Build a compact pixel font map for A, &, M
+        # Each glyph is 4x4 logical pixels to keep letters small.
+        glyphs = {
+            'A': [
+                "0110",
+                "1001",
+                "1111",
+                "1001",
+            ],
+            '&': [
+                "0110",
+                "1000",
+                "0110",
+                "1011",
+            ],
+            'M': [
+                "1001",
+                "1111",
+                "1011",
+                "1001",
+            ],
+        }
+        text = ['A', '&', 'M']
+        glyph_size = 4
+        # Tighten spacing to avoid drifting toward arm area
+        spacing = 0
+        # Compute per-pixel scale so the glyphs fit nicely across logo_w
+        total_cols = len(text) * glyph_size + (len(text) - 1) * spacing
+        # Use minimal scaling for crisp, small lettering on hoodie
+        scale = 1
+        cursor_x = logo_x - 2  # nudge a bit more left to shift 'A'
+        for ch in text:
+            g = glyphs.get(ch)
+            if not g:
+                continue
+            for gy, row in enumerate(g):
+                for gx, cval in enumerate(row):
+                    if cval == '1':
+                        # draw a scale x scale block for each on-pixel
+                        for sx in range(scale):
+                            for sy in range(scale):
+                                px = cursor_x + gx*scale + sx
+                                py = logo_y + gy*scale + sy
+                                # Clip to hoodie/body area to ensure logo stays on the chest
+                                if (body_x <= px < body_x + body_w) and (body_y <= py < body_y + body_h):
+                                    self._safe_set_px(surf, px, py, logo_color)
+            cursor_x += glyph_size * scale + spacing
+
         # Legs
         leg_w = max(2, int(body_w * 0.3))
         leg_h = max(4, int(h * 0.18))
@@ -404,14 +461,9 @@ class RedHoodiePixelAvatar:
             for hy in (hand_ry - 1, hand_ry):
                 self._safe_set_px(surf, hx, hy, hand_col)
 
-        # simple outer border (1px) to help readability
-        outline = p['outline']
-        for ox in range(w):
-            self._set_px(surf, ox, 0, outline)
-            self._set_px(surf, ox, h-1, outline)
-        for oy in range(h):
-            self._set_px(surf, 0, oy, outline)
-            self._set_px(surf, w-1, oy, outline)
+        # Removed outer dark border to eliminate visible black outline
+        # around the right-side avatar. Keeping edges unmodified preserves
+        # a clean, borderless look that blends with the menu.
 
     def update(self):
         now = pygame.time.get_ticks()

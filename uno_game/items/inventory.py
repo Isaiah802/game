@@ -38,21 +38,41 @@ class Inventory:
         """Get all items and their quantities."""
         return self.items.copy()
     
-    def use_item(self, item: ConsumableItem) -> bool:
-        """
-        Use an item from the inventory.
-        Returns True if the item was successfully used.
+    def use_item(self, item: ConsumableItem, external_effects: Optional[Dict[Effect, int]] = None) -> bool:
+        """Consume an item and apply effects.
+
+        If `external_effects` is provided (e.g. a player's active_effects dict),
+        durations stack into that mapping instead of the inventory's local
+        `active_effects`. This keeps player effect state unified with game logic.
         """
         if not self.remove_item(item):
             return False
-            
-        # Apply effects
+
+        target = external_effects if external_effects is not None else self.active_effects
         for effect in item.effects:
-            current_duration = self.active_effects.get(effect, 0)
-            # Effects stack in duration
-            self.active_effects[effect] = current_duration + item.duration
-            
+            current_duration = target.get(effect, 0)
+            target[effect] = current_duration + item.duration
         return True
+
+    # Convenience helpers
+    def add_item_by_name(self, name: str, quantity: int = 1):
+        from .consumables import registry
+        itm = registry.get_item(name)
+        if itm:
+            self.add_item(itm, quantity)
+
+    def remove_item_by_name(self, name: str, quantity: int = 1) -> bool:
+        from .consumables import registry
+        itm = registry.get_item(name)
+        return self.remove_item(itm, quantity) if itm else False
+
+    def apply_item_effects_to(self, item: ConsumableItem, dest_effects: Dict[Effect, int]):
+        for effect in item.effects:
+            dest_effects[effect] = dest_effects.get(effect, 0) + item.duration
+
+    def summary(self) -> str:
+        parts = [f"{name} x{qty}" for name, qty in sorted(self.items.items())]
+        return ", ".join(parts) if parts else "(empty)"
     
     def update_effects(self):
         """Update active effects (call each turn)."""

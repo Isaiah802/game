@@ -62,17 +62,57 @@ class StatusDisplay:
             info = self.EFFECT_INFO[effect]
             
             if compact:
-                # Compact mode: just colored circle with symbol
-                radius = 12
-                pygame.draw.circle(screen, info['color'], (current_x + radius, current_y + radius), radius)
-                pygame.draw.circle(screen, (0, 0, 0), (current_x + radius, current_y + radius), radius, 2)
+                # Compact mode: circular timer badge with countdown arc
+                radius = 14
+                center = (current_x + radius, current_y + radius)
                 
-                # Draw turns remaining
+                # Outer rim (gold)
+                pygame.draw.circle(screen, (212, 175, 55), center, radius + 2)
+                
+                # Main circle
+                pygame.draw.circle(screen, info['color'], center, radius)
+                
+                # Draw countdown arc (shows remaining turns as filled portion)
+                # Assume max duration is typically 3-5 turns; cap visual at 5
+                max_visual_turns = 5
+                arc_fraction = min(1.0, turns_left / max_visual_turns)
+                if arc_fraction > 0:
+                    import math
+                    # Draw arc as filled pie slice (dark overlay showing "used" portion)
+                    start_angle = -90  # Start at top
+                    end_angle = start_angle + 360 * (1 - arc_fraction)
+                    
+                    # Create surface for arc overlay
+                    arc_surf = pygame.Surface((radius*2+4, radius*2+4), pygame.SRCALPHA)
+                    arc_center = (radius+2, radius+2)
+                    
+                    # Draw dark wedge for "consumed" time
+                    if arc_fraction < 1.0:
+                        points = [arc_center]
+                        for angle_deg in range(int(start_angle), int(end_angle) + 1, 5):
+                            angle_rad = math.radians(angle_deg)
+                            px = arc_center[0] + int(radius * math.cos(angle_rad))
+                            py = arc_center[1] + int(radius * math.sin(angle_rad))
+                            points.append((px, py))
+                        points.append(arc_center)
+                        if len(points) > 2:
+                            pygame.draw.polygon(arc_surf, (0, 0, 0, 100), points)
+                    
+                    screen.blit(arc_surf, (current_x - 2, current_y - 2))
+                
+                # Border
+                pygame.draw.circle(screen, (0, 0, 0), center, radius, 2)
+                
+                # Draw turns remaining number
                 turns_surf = self.font_tiny.render(str(turns_left), True, (255, 255, 255))
-                turns_rect = turns_surf.get_rect(center=(current_x + radius, current_y + radius))
+                # Add shadow for readability
+                shadow_surf = self.font_tiny.render(str(turns_left), True, (0, 0, 0))
+                shadow_rect = shadow_surf.get_rect(center=(center[0]+1, center[1]+1))
+                screen.blit(shadow_surf, shadow_rect)
+                turns_rect = turns_surf.get_rect(center=center)
                 screen.blit(turns_surf, turns_rect)
                 
-                current_x += radius * 2 + 5
+                current_x += (radius + 2) * 2 + 8
             else:
                 # Full mode: colored box with name and turns
                 width = 80
